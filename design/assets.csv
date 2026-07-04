@@ -1,0 +1,17 @@
+id,role,type,description,size/ratio,style line ref,source
+hero-rocket,player ship sprite (baked procedural canvas; rotated in code; thruster/shield drawn live),sprite,the sleek white combat rocket,128px,STYLE FORMULA v1,procedural-canvas (workspace at 0 credits — AI generation impossible this run; regenerate via nano_banana_2 when credits available)
+enemy-scout,small scout fighter enemy (tinted variants: sniper),sprite,the small alien scout fighter,96px,STYLE FORMULA v1,procedural-canvas (same note)
+enemy-heavy,heavy fighter enemy (tinted variants: shield ship / elite commander),sprite,the heavy alien war fighter,128px,STYLE FORMULA v1,procedural-canvas (same note)
+enemy-drone,kamikaze drone / swarm enemy,sprite,the round alien attack drone,64px,STYLE FORMULA v1,procedural-canvas (same note)
+enemy-bomber,bomber enemy (tinted variant: ghost enemy),sprite,the bulky alien bomber ship,128px,STYLE FORMULA v1,procedural-canvas (same note)
+boss-mech,mechanical boss sprite (titan / fortress / dark emperor variants via params),sprite,the enormous alien mothership,384px,STYLE FORMULA v1,procedural-canvas (same note)
+boss-organic,organic boss sprite (worm / kraken / alien queen variants via params),sprite,the monstrous organic alien queen creature,384px,STYLE FORMULA v1,procedural-canvas (same note)
+asteroid,asteroid obstacle (random rotation/scale/tint),sprite,the cratered rocky asteroid,96px,STYLE FORMULA v1,procedural-canvas (same note)
+planet-orb,planet backdrop orb (per-level hue tint),sprite,the glowing gas planet sphere,512px,STYLE FORMULA v1,procedural-canvas (same note)
+bg-nebula,deep space nebula backdrop (per-level hue tint; parallax starfield over it),background,deep space nebula with distant stars,1280x720 baked,STYLE FORMULA v1,procedural-canvas (same note)
+starfield-fx,"parallax starfield, space dust, engine/explosion particles, shield bubbles, laser beams",procedural-canvas,code-drawn effects embedding the FORMULA palette,runtime,STYLE FORMULA v1,procedural-canvas
+music-main,campaign / menu combat music loop,audio-music,epic sci-fi combat theme,WebAudio loop,STYLE FORMULA v1 mood,procedural-webaudio (sonilo_music when credits available)
+music-boss,boss battle music loop,audio-music,dark intense boss battle theme,WebAudio loop,STYLE FORMULA v1 mood,procedural-webaudio (same note)
+music-menu,title / hangar ambient loop,audio-music,mysterious ambient space theme,WebAudio loop,STYLE FORMULA v1 mood,procedural-webaudio
+sfx-all,"laser, plasma, railgun, missile, explosions, hits, shield, pickup, boost, EMP, alarms, UI, victory, defeat",audio-sfx,procedural WebAudio synthesis,runtime,STYLE FORMULA v1 mood,procedural-webaudio
+cover-card,deploy thumbnail 16:9 + favicon 1:1 (delivery collateral),image,key art rendered from the procedural art module,1280x720 / 512x512,STYLE FORMULA v1,procedural-canvas render uploaded via media_upload
