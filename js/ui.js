@@ -201,11 +201,11 @@ export class UI {
     g.fillText(STR.subtitle, cx, h * 0.24 + Math.min(58, w * 0.06));
     g.restore();
     g.fillStyle = "#93a5cc";
-    g.font = `16px ${FONT}`;
+    g.font = `${Math.min(16, w * 0.055)}px ${FONT}`;
     g.fillText(STR.tagline, cx, h * 0.38);
     g.globalAlpha = 0.6 + Math.sin(this.t * 3) * 0.35;
     g.fillStyle = PAL.cyan;
-    g.font = `bold 17px ${FONT}`;
+    g.font = `bold ${Math.min(17, w * 0.058)}px ${FONT}`;
     g.fillText(STR.pressStart, cx, h * 0.86);
     g.globalAlpha = 1;
     if (input.anyKey || input.clicks.length) this.app.firstInteract();
@@ -420,8 +420,10 @@ export class UI {
         g.fillText("✓", x + 20, y - 20);
       }
       g.fillStyle = unlocked ? "#dfe7ff" : "#5d6890";
-      g.font = `bold 12px ${FONT}`;
-      g.fillText(STR.planets[i].name, x, y + 42);
+      g.font = `bold ${Math.min(12, cellW * 0.085)}px ${FONT}`;
+      // stagger label rows on tight grids so neighbours don't collide
+      const stag = cellW < 150 ? (i % 2) * 13 : 0;
+      g.fillText(STR.planets[i].name, x, y + 42 + stag);
       g.restore();
       if (this._clicked(idx, !unlocked)) { this.mapSel = i; }
     }
@@ -430,10 +432,10 @@ export class UI {
     const sel = Math.min(this.mapSel, visible - 1);
     const narrow = w < 560;
     const pw = Math.min(680, w - 30);
-    const ph = narrow ? 158 : 116;
+    const ph = narrow ? (w < 330 ? 196 : 158) : 116;
     const py = h - ph - 34;
     this.panel(g, w / 2 - pw / 2, py, pw, ph);
-    g.fillStyle = PAL.cyan; g.font = `bold 18px ${FONT}`; g.textAlign = "left";
+    g.fillStyle = PAL.cyan; g.font = `bold ${Math.min(18, pw * 0.055)}px ${FONT}`; g.textAlign = "left";
     const clearedSel = cleared.includes(sel);
     g.fillText(`${sel + 1}. ${STR.planets[sel].name}` + (clearedSel ? `  — ${STR.map.cleared}` : ""), w / 2 - pw / 2 + 20, py + 24);
     g.fillStyle = "#aebadd"; g.font = `14px ${FONT}`;
@@ -445,8 +447,8 @@ export class UI {
     }
     if (this.button(g, "back", 20, 20, 110, 40, STR.menu.back)) { this.app.sfx("uiBack"); this.go("menu"); }
     if (!profile.hiddenUnlocked) {
-      g.fillStyle = "#68d"; g.font = `italic 12px ${FONT}`; g.textAlign = "center";
-      g.fillText(STR.map.hiddenHint + ` (${profile.artifacts}/3)`, w / 2, h - 12);
+      g.fillStyle = "#68d"; g.font = `italic ${Math.min(12, w * 0.032)}px ${FONT}`; g.textAlign = "center";
+      g.fillText(STR.map.hiddenHint + ` (${profile.artifacts}/3)`, w / 2, h - 10);
     }
 
     function nodePos(i) {
