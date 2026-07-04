@@ -134,6 +134,55 @@ export const ENDLESS = {
 
 export const NGPLUS = { hp: 1.6, dmg: 1.5, reward: 1.5 };
 
+// Run-scoped perks offered as a draft of 3 after each cleared wave.
+// mods multiply/add onto game.perkMods; flags switch behaviors on.
+export const PERKS = [
+  { id: "overcharge",  rare: false, mods: { dmg: 1.15 } },
+  { id: "hairTrigger", rare: false, mods: { rate: 1.15 } },
+  { id: "deadeye",     rare: false, mods: { crit: 0.08 } },
+  { id: "afterburner", rare: false, mods: { speed: 1.12 } },
+  { id: "tractor",     rare: false, mods: { magnet: 70 } },
+  { id: "capacitor",   rare: false, mods: { energyRegen: 1.5 } },
+  { id: "reflexes",    rare: false, mods: { dodgeCd: 0.7 } },
+  { id: "salvage",     rare: false, mods: { drops: 1.35 } },
+  { id: "comboCore",   rare: false, mods: { comboWindow: 1.5 } },
+  { id: "warheads",    rare: false, mods: { missileSplash: 1.4 } },
+  { id: "piercing",    rare: true,  mods: { pierce: 1 } },
+  { id: "vampiric",    rare: true,  flags: ["lifesteal"] },
+  { id: "aegis",       rare: true,  flags: ["shieldOnKill"] },
+  { id: "ricochet",    rare: true,  flags: ["ricochet"] },
+  { id: "splitShot",   rare: true,  flags: ["splitOnKill"] },
+  { id: "freeBoost",   rare: true,  flags: ["freeBoost"] },
+  { id: "twinMissile", rare: true,  mods: { missiles: 1 } },
+  { id: "empAmp",      rare: true,  mods: { empRadius: 1.4 } },
+];
+
+// Playable ships (formerly cosmetic skins) — same unlock conditions.
+export const SHIPS = {
+  frontier: { speed: 1,    dmg: 1,    rate: 1,    hull: 1,   shield: 1,   missiles: 0, dodgeCd: 1,    boostCost: 1,   traits: [] },
+  crimson:  { speed: 1.3,  dmg: 1.25, rate: 1.05, hull: 0.6, shield: 0.9, missiles: 0, dodgeCd: 0.75, boostCost: 1,   traits: [] },
+  solar:    { speed: 0.8,  dmg: 1,    rate: 0.85, hull: 1.6, shield: 1.2, missiles: 2, dodgeCd: 1.15, boostCost: 1,   traits: [] },
+  void:     { speed: 1.1,  dmg: 1,    rate: 1,    hull: 0.9, shield: 0.8, missiles: 0, dodgeCd: 0.9,  boostCost: 1,   traits: ["lifesteal"] },
+  aurora:   { speed: 1.15, dmg: 1.15, rate: 1.15, hull: 1.15,shield: 1.15,missiles: 1, dodgeCd: 0.85, boostCost: 0.5, traits: [] },
+};
+
+// Star goals per mission: clear + no damage + under par seconds.
+export const STAR_PAR = [100, 130, 160, 170, 180, 190, 200, 210, 220, 240, 240];
+
+// Mid-mission events roll every EVENT.gap seconds during waves.
+export const EVENTS = {
+  gap: [18, 30],
+  bounty: { kills: 4, window: 6, creditReward: 150 },
+};
+
+export const JUICE = {
+  hitStopBig: 0.05,
+  hitStopBoss: 0.09,
+  streakWindow: 1.1,
+  nearMissSlow: 0.45,
+  nearMissTime: 0.5,
+};
+
 export const ACH_IDS = [
   "firstBlood", "earthSaved", "halfway", "savior", "kills100", "kills1000",
   "noDamage", "speedRun", "combo8", "treasure", "endless10", "bossRush",

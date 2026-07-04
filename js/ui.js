@@ -41,6 +41,19 @@ export class UI {
 
   toast(text, sub = "") { this.toasts.push({ text, sub, t: 3.2 }); }
 
+  streak(count) {
+    const txt = STR.streaks[Math.min(count, STR.streaks.length - 1)];
+    if (!txt) return;
+    this.streakBanner = { text: txt, t: 1.1, color: count >= 5 ? PAL.magenta : PAL.gold };
+  }
+  closeCall() { this.streakBanner = { text: STR.closeCall, t: 0.8, color: PAL.cyan }; }
+  event(type, data) {
+    let text = STR.events[type] || type;
+    if (type === "bounty" && data) text = text.replace("{n}", data.n).replace("{s}", data.s);
+    if (type === "bountyDone" && data) text = `${STR.events.bountyDone} +${data} CR`;
+    this.eventBanner = { text, t: 2.2, color: type === "ambush" ? "#ff6a7a" : type === "bountyFail" ? "#ff6a7a" : PAL.cyan };
+  }
+
   // ---------- widget helpers ----------
   beginFrame() { this.widgets.length = 0; }
 
@@ -221,27 +234,31 @@ export class UI {
     g.font = `bold ${Math.min(40, w * 0.052)}px ${FONT}`;
     g.fillText(STR.title + " — " + STR.subtitle, cx, 64);
     g.restore();
-    const bw = Math.min(360, w - 60), bh = 44, gap = 12;
-    let y = 120;
+    const bw = Math.min(360, w - 60);
+    const bh = Math.min(44, (h - 170) / 10 - 8), gap = Math.min(12, bh * 0.25);
+    let y = Math.min(120, h * 0.14);
     const hasSave = this.app.hasAnySave();
+    const dailyBest = this.app.dailyBest();
     const items = [
       ["continue", STR.menu.continue, !hasSave],
       ["new", STR.menu.newGame, false],
       ["map", STR.menu.galaxyMap, !profile],
       ["endless", STR.menu.endless, !profile],
       ["bossrush", STR.menu.bossRush, !profile],
+      ["daily", STR.menu.daily + (dailyBest ? `  ·  ${STR.menu.dailyBest} ${dailyBest}` : ""), !profile],
       ["hangar", STR.menu.hangar, !profile],
       ["ach", STR.menu.achievements, !profile],
       ["settings", STR.menu.settings, false],
       ["controls", STR.controls.title, false],
     ];
     for (const [id, label, disabled] of items) {
-      if (this.button(g, id, cx - bw / 2, y, bw, bh, label, { disabled })) this.app.menuAction(id);
+      if (this.button(g, id, cx - bw / 2, y, bw, bh, label, { disabled, size: 15 })) this.app.menuAction(id);
       y += bh + gap;
     }
     if (profile) {
-      g.fillStyle = PAL.gold; g.font = `bold 16px ${FONT}`; g.textAlign = "center";
-      g.fillText(`${profile.credits} ${STR.hud.credits}   ◆ ${profile.crystals}   ${DIFFS[profile.difficulty].label.toUpperCase()}${profile.ngPlus ? "  NG+" + profile.ngPlus : ""}`, cx, y + 8);
+      const stars = this.app.totalStars();
+      g.fillStyle = PAL.gold; g.font = `bold 15px ${FONT}`; g.textAlign = "center";
+      g.fillText(`${profile.credits} ${STR.hud.credits}   ◆ ${profile.crystals}   ★ ${stars}   ${DIFFS[profile.difficulty].label.toUpperCase()}${profile.ngPlus ? "  NG+" + profile.ngPlus : ""}`, cx, y + 8);
     }
   }
 
@@ -416,8 +433,9 @@ export class UI {
       if (done) {
         g.strokeStyle = PAL.gold; g.lineWidth = 2;
         g.beginPath(); g.arc(x, y, 28, 0, 7); g.stroke();
-        g.fillStyle = PAL.gold; g.font = `bold 13px ${FONT}`;
-        g.fillText("✓", x + 20, y - 20);
+        const st = (profile.stars || {})[i] || 0;
+        g.fillStyle = PAL.gold; g.font = `bold 11px ${FONT}`;
+        g.fillText("★".repeat(st) + "☆".repeat(Math.max(0, 3 - st)), x, y - 38);
       }
       g.fillStyle = unlocked ? "#dfe7ff" : "#5d6890";
       g.font = `bold ${Math.min(12, cellW * 0.085)}px ${FONT}`;
@@ -514,17 +532,21 @@ export class UI {
       const owned = profile.skins.includes(s.id);
       const equipped = profile.skin === s.id;
       const label = STR.skins[s.id];
-      const bw2 = 132;
+      const bw2 = 148;
       if (this.button(g, "s_" + s.id, sx2, y, bw2, 30, equipped ? "● " + label : label, { size: 12, disabled: !owned })) {
         this.app.equipSkin(s.id);
       }
-      if (!owned) {
-        g.fillStyle = "#7d8bb5"; g.font = `10px ${FONT}`; g.textAlign = "center";
+      g.font = `10px ${FONT}`; g.textAlign = "center";
+      if (owned) {
+        g.fillStyle = "#9fb2dd";
+        g.fillText(STR.skins.shipDesc[s.id] || "", sx2 + bw2 / 2, y + 42);
+      } else {
+        g.fillStyle = "#7d8bb5";
         const hintKey = "skinHint" + s.id[0].toUpperCase() + s.id.slice(1);
         g.fillText(STR.skins[hintKey] || STR.upgrades.locked, sx2 + bw2 / 2, y + 42);
       }
       sx2 += bw2 + 10;
-      if (sx2 + bw2 > px + pw - 20) { sx2 = listX; y += 56; }
+      if (sx2 + bw2 > px + pw - 20) { sx2 = listX; y += 58; }
     }
     if (this.button(g, "back", px + pw - 140, h - 70, 120, 40, STR.menu.back)) { this.app.sfx("uiBack"); this.go("menu"); }
   }
@@ -555,9 +577,9 @@ export class UI {
     this.menuBackdrop(g, w, h);
     const pw = Math.min(480, w - 30);
     const px = w / 2 - pw / 2;
-    this.panel(g, px, 80, pw, 360, STR.menu.settings);
+    this.panel(g, px, 60, pw, Math.min(490, h - 100), STR.menu.settings);
     const s = this.app.settings;
-    let y = 150;
+    let y = 130;
     for (const [key, label] of [["music", STR.settings.music], ["sfx", STR.settings.sfx]]) {
       g.fillStyle = "#dfe7ff"; g.font = `bold 15px ${FONT}`; g.textAlign = "left";
       g.fillText(label, px + 34, y);
@@ -568,7 +590,7 @@ export class UI {
       if (this.button(g, key + "+", px + 376, y - 16, 36, 32, "+")) { s[key] = Math.min(1, Math.round((s[key] + 0.1) * 10) / 10); this.app.settingsChanged(); }
       y += 62;
     }
-    for (const [key, label] of [["shake", STR.settings.shake], ["reducedFlash", STR.settings.flash]]) {
+    for (const [key, label] of [["shake", STR.settings.shake], ["reducedFlash", STR.settings.flash], ["haptics", STR.settings.haptics]]) {
       g.fillStyle = "#dfe7ff"; g.font = `bold 15px ${FONT}`; g.textAlign = "left";
       g.fillText(label, px + 34, y);
       if (this.button(g, key, px + 246, y - 16, 120, 32, s[key] ? STR.settings.on : STR.settings.off)) { s[key] = !s[key]; this.app.settingsChanged(); }
@@ -615,7 +637,7 @@ export class UI {
     g.font = `bold 14px ${FONT}`;
     g.fillText(STR.weapons[wdef.key], bx, 76);
     g.fillStyle = "#ffb35c";
-    g.fillText(`${STR.hud.missiles} ${"▮".repeat(p.missiles)}${"▯".repeat(Math.max(0, st.missileMax - p.missiles))}`, bx, 95);
+    g.fillText(`${STR.hud.missiles} ${"▮".repeat(p.missiles)}${"▯".repeat(Math.max(0, game.missileCap() - p.missiles))}`, bx, 95);
     // score / combo top-center
     g.textAlign = "center";
     g.fillStyle = "#eaf6ff"; g.font = `bold 22px ${FONT}`;
@@ -705,8 +727,66 @@ export class UI {
       g.fillText(hints[Math.floor(game.time / 6) % hints.length], w / 2, h * 0.7);
     }
 
+    // mid-mission event banner + bounty tracker
+    if (this.eventBanner && this.eventBanner.t > 0) {
+      this.eventBanner.t -= 1 / 60;
+      g.save();
+      g.globalAlpha = Math.min(1, this.eventBanner.t * 2);
+      g.fillStyle = this.eventBanner.color || PAL.cyan;
+      g.font = `bold ${Math.min(20, w * 0.045)}px ${FONT}`;
+      g.textAlign = "center";
+      g.fillText(this.eventBanner.text, w / 2, h * 0.2);
+      g.restore();
+    }
+    if (game.bounty) {
+      const got = game.kills - game.bounty.startKills;
+      g.save();
+      g.fillStyle = PAL.gold; g.font = `bold 15px ${FONT}`; g.textAlign = "center";
+      g.fillText(`☠ ${got}/${game.bounty.need} — ${game.bounty.left.toFixed(1)}s`, w / 2, h * 0.14);
+      g.restore();
+    }
+
+    // kill-streak splash
+    if (this.streakBanner && this.streakBanner.t > 0) {
+      const sb = this.streakBanner;
+      sb.t -= 1 / 60;
+      g.save();
+      const pop = 1 + Math.max(0, sb.t - 0.85) * 2.5;
+      g.translate(w / 2, h * 0.34);
+      g.scale(pop, pop);
+      g.globalAlpha = Math.min(1, sb.t * 3);
+      g.fillStyle = sb.color;
+      g.shadowColor = sb.color; g.shadowBlur = 18;
+      g.font = `bold ${Math.min(30, w * 0.06)}px ${FONT}`;
+      g.textAlign = "center";
+      g.fillText(sb.text, 0, 0);
+      g.restore();
+    }
+
+    // boss intro card during the entrance
+    if (game.boss && game.boss.entering) {
+      const b = game.boss;
+      g.save();
+      const cw = Math.min(420, w - 40), ch = 76;
+      const cx2 = w / 2 - cw / 2, cy2 = h * 0.62;
+      g.globalAlpha = 0.92;
+      g.fillStyle = "rgba(20,8,30,0.85)";
+      g.strokeStyle = PAL.magenta; g.lineWidth = 2;
+      chamfer(g, cx2, cy2, cw, ch, 12); g.fill(); g.stroke();
+      const spr = b.kind === "mech" ? this.atlas.bossMech : this.atlas.bossOrganic;
+      g.drawImage(spr, cx2 + 8, cy2 + 8, 60, 60);
+      g.fillStyle = PAL.magenta; g.font = `bold ${Math.min(22, cw * 0.055)}px ${FONT}`; g.textAlign = "left"; g.textBaseline = "middle";
+      g.fillText(STR.bosses[b.idx] || "BOSS", cx2 + 80, cy2 + 30);
+      g.fillStyle = "#c9a0d8"; g.font = `bold 12px ${FONT}`;
+      g.fillText(`${STR.bossCard.threat} ${"◆".repeat(Math.min(5, Math.ceil((b.idx + 1) / 2)))}`, cx2 + 80, cy2 + 54);
+      g.restore();
+    }
+
     // touch controls
     if (input.touchActive) this.drawTouchControls(g, w, h);
+
+    // perk draft overlay (world is frozen while it is up)
+    if (game.pendingDraft) this.drawDraft(g, w, h, game);
 
     // low hull vignette
     if (p.alive && p.hull / st.maxHull < 0.3) {
@@ -716,6 +796,49 @@ export class UI {
       gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(1, "rgba(255,30,50,0.5)");
       g.fillStyle = gr; g.fillRect(0, 0, w, h);
       g.restore();
+    }
+  }
+
+  drawDraft(g, w, h, game) {
+    g.save();
+    g.fillStyle = "rgba(4,4,16,0.7)";
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = PAL.cyan;
+    g.font = `bold ${Math.min(20, w * 0.045)}px ${FONT}`;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(STR.perks.title, w / 2, h * 0.18);
+    g.restore();
+    const draft = game.pendingDraft;      // snapshot: applyPerk nulls it mid-loop
+    const n = draft.length;
+    const vertical = w < 620;
+    const cw = vertical ? Math.min(340, w - 40) : Math.min(200, (w - 80) / n);
+    const chh = vertical ? 74 : 150;
+    for (let i = 0; i < n; i++) {
+      const perk = draft[i];
+      const px = vertical ? w / 2 - cw / 2 : w / 2 + (i - (n - 1) / 2) * (cw + 18) - cw / 2;
+      const py = vertical ? h * 0.26 + i * (chh + 14) : h * 0.3;
+      const ps = STR.perks[perk.id] || { name: perk.id, desc: "" };
+      const idx = this.widgets.length;
+      this.widgets.push({ id: "perk" + i, x: px, y: py, w: cw, h: chh });
+      const focused = this.focus === idx;
+      const m = input.mouse;
+      const hover = m.x >= px && m.x <= px + cw && m.y >= py && m.y <= py + chh;
+      if (hover && m.moved) this.focus = idx;
+      const hot = focused || hover;
+      g.save();
+      g.fillStyle = hot ? "rgba(60,80,140,0.85)" : "rgba(14,18,40,0.92)";
+      g.strokeStyle = perk.rare ? PAL.magenta : (hot ? PAL.cyan : "rgba(125,224,255,0.4)");
+      g.lineWidth = hot ? 2.5 : 1.5;
+      chamfer(g, px, py, cw, chh, 10);
+      g.fill(); g.stroke();
+      g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillStyle = perk.rare ? PAL.magenta : PAL.cyan;
+      g.font = `bold 15px ${FONT}`;
+      g.fillText(ps.name, px + cw / 2, py + (vertical ? 24 : 34));
+      g.fillStyle = "#c9d6f2"; g.font = `12px ${FONT}`;
+      wrapText(g, ps.desc, px + cw / 2, py + (vertical ? 48 : 70), cw - 24, 15);
+      g.restore();
+      if (this._clicked(idx, false) && game.pendingDraft) { game.applyPerk(perk); break; }
     }
   }
 
@@ -834,6 +957,14 @@ export class UI {
       g.textAlign = "left"; g.fillStyle = color || "#eaf6ff";
       g.fillText(String(val), splitX + 12, y);
       y += 30;
+    }
+    if (r.stars !== undefined && r.outcome === "victory") {
+      g.textAlign = "center"; g.font = `bold 30px ${FONT}`;
+      g.fillStyle = PAL.gold;
+      g.save(); g.shadowColor = PAL.gold; g.shadowBlur = 14;
+      g.fillText("★".repeat(r.stars) + "☆".repeat(3 - r.stars), w / 2, y + 10);
+      g.restore();
+      y += 44;
     }
     if (r.perfect) {
       g.textAlign = "center"; g.fillStyle = PAL.gold; g.font = `bold 17px ${FONT}`;

@@ -23,7 +23,13 @@ export function freshProfile() {
     endlessBestScore: 0,
     bossRushDone: false,
     hiddenUnlocked: false,
+    stars: {},               // planetIdx -> best 0-3
   };
+}
+
+function migrate(p) {
+  if (p && !p.stars) p.stars = {};
+  return p;
 }
 
 function loadAll() {
@@ -38,7 +44,7 @@ const db = loadAll();
 
 export const save = {
   slots() { return db.slots; },
-  get(i) { return db.slots[i]; },
+  get(i) { return migrate(db.slots[i]); },
   create(i, difficulty) {
     const p = freshProfile();
     p.createdAt = Date.now();
@@ -59,11 +65,29 @@ export const save = {
 };
 
 export function loadSettings() {
+  const def = { music: 0.8, sfx: 0.8, shake: true, reducedFlash: false, haptics: true };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return Object.assign(def, JSON.parse(raw));
   } catch (e) { /* default */ }
-  return { music: 0.8, sfx: 0.8, shake: true, reducedFlash: false };
+  return def;
+}
+
+// Daily-run record: one entry per UTC day, profile-independent.
+const DAILY_KEY = "sfaw_daily_v1";
+export function dailyDate() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+export function dailyRecord() {
+  try {
+    const r = JSON.parse(localStorage.getItem(DAILY_KEY) || "null");
+    if (r && r.date === dailyDate()) return r;
+  } catch (e) { /* fresh */ }
+  return { date: dailyDate(), best: 0, attempts: 0 };
+}
+export function storeDaily(r) {
+  try { localStorage.setItem(DAILY_KEY, JSON.stringify(r)); } catch (e) { /* non-fatal */ }
 }
 export function storeSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* non-fatal */ }

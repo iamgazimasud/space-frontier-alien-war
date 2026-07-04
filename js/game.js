@@ -1,5 +1,5 @@
 // Core simulation + world rendering. Fixed-timestep, seeded RNG, pooled entities.
-import { WORLD, PERF, DIFFS, WEAPONS, MISSILE, UPGRADES, ENEMIES, BOSSES, PLANETS, POWERUPS, POWERUP_TIME, POWERUP_DROP, ARTIFACT_DROP, ENDLESS, NGPLUS, SKINS } from "./data.js";
+import { WORLD, PERF, DIFFS, WEAPONS, MISSILE, UPGRADES, ENEMIES, BOSSES, PLANETS, POWERUPS, POWERUP_TIME, POWERUP_DROP, ARTIFACT_DROP, ENDLESS, NGPLUS, SKINS, PERKS, SHIPS, EVENTS, JUICE } from "./data.js";
 import { simRng, fxRng } from "./rng.js";
 import { spawnGlow, spawnSpark, explosion, updateParticles, drawParticles, clearParticles, GLOW, floatText, updateTexts, drawTexts, setParticleSprites, particleCount } from "./particles.js";
 import { PAL, nebulaBackground, planetSprite } from "./art.js";
@@ -9,21 +9,26 @@ const TAU = Math.PI * 2;
 function upLevel(profile, id) { return profile.upgrades[id] || 0; }
 function upEff(id) { return UPGRADES.find((u) => u.id === id).eff; }
 
-export function derivedStats(profile) {
-  const u = (id) => upLevel(profile, id) * upEff(id);
+export function derivedStats(profile, stock = false) {
+  // stock=true = daily-run fairness: no hangar upgrades, everyone flies the Frontier
+  const u = (id) => (stock ? 0 : upLevel(profile, id) * upEff(id));
+  const ship = stock ? SHIPS.frontier : (SHIPS[profile.skin] || SHIPS.frontier);
   return {
-    accel: WORLD.playerAccel * (1 + u("engine")),
-    maxSpeed: WORLD.playerMaxSpeed * (1 + u("engine")),
-    dmgMul: 1 + u("damage"),
-    rateMul: 1 + u("fireRate"),
+    accel: WORLD.playerAccel * (1 + u("engine")) * ship.speed,
+    maxSpeed: WORLD.playerMaxSpeed * (1 + u("engine")) * ship.speed,
+    dmgMul: (1 + u("damage")) * ship.dmg,
+    rateMul: (1 + u("fireRate")) * ship.rate,
     critChance: u("crit"),
-    maxHull: 100 + u("hull"),
+    maxHull: (100 + u("hull")) * ship.hull,
     armor: Math.min(0.5, u("armor")),
-    maxShield: 60 + u("shieldCap"),
+    maxShield: (60 + u("shieldCap")) * ship.shield,
     shieldRegen: 8 * (1 + u("shieldRegen")),
-    missileMax: 2 + upLevel(profile, "missiles"),
+    missileMax: 2 + (stock ? 0 : upLevel(profile, "missiles")) + ship.missiles,
     maxEnergy: 100 + u("energy"),
     magnetR: WORLD.pickupRadius + u("magnet"),
+    dodgeCdMul: ship.dodgeCd,
+    boostCostMul: ship.boostCost,
+    traits: ship.traits,
   };
 }
 
@@ -75,21 +80,38 @@ export class Game {
   // ---------- mission setup ----------
   startMission(opts, profile) {
     this.profile = profile;
-    this.mode = opts.mode;                    // story | endless | bossrush
+    this.isDaily = opts.mode === "daily";
+    this.mode = this.isDaily ? "endless" : opts.mode;   // story | endless | bossrush (daily = seeded stock endless)
     this.planet = opts.planet ?? 0;
     this.diff = DIFFS[profile.difficulty] || DIFFS.normal;
     this.ngMul = profile.ngPlus ? NGPLUS : { hp: 1, dmg: 1, reward: 1 };
     const pdef = PLANETS[Math.min(this.planet, PLANETS.length - 1)];
     this.pdef = pdef;
-    simRng.reseed((this.planet + 1) * 7919 + (profile.ngPlus + 1) * 31 + { easy: 1, normal: 2, hard: 3, nightmare: 4 }[profile.difficulty] * 101 + (this.mode === "endless" ? 55 : 0));
+    if (this.isDaily && opts.seed) simRng.reseed(opts.seed);
+    else simRng.reseed((this.planet + 1) * 7919 + (profile.ngPlus + 1) * 31 + { easy: 1, normal: 2, hard: 3, nightmare: 4 }[profile.difficulty] * 101 + (this.mode === "endless" ? 55 : 0));
+    if (this.isDaily) this.diff = DIFFS.normal;
     this.bg = nebulaBackground(pdef.hue);
     this.planetImg = planetSprite(pdef.hue);
     this.planetRot = 0;
 
-    const st = derivedStats(profile);
+    const st = derivedStats(profile, this.isDaily);
     this.stats = st;
     const skin = SKINS.find((s) => s.id === profile.skin) || SKINS[0];
     this.skinGlow = skin.glow;
+
+    // run-scoped perk system
+    this.perks = [];
+    this.perkMods = { dmg: 1, rate: 1, crit: 0, speed: 1, magnet: 0, energyRegen: 1, dodgeCd: 1, drops: 1, comboWindow: 0, missileSplash: 1, pierce: 0, missiles: 0, empRadius: 1 };
+    this.perkFlags = new Set(st.traits);
+    this.pendingDraft = null;
+
+    // juice + events state
+    this.hitStop = 0;
+    this.streakCount = 0; this.streakT = 0; this.streakBanner = null;
+    this.nearMissT = 0;
+    this.eventT = simRng.range(EVENTS.gap[0], EVENTS.gap[1]);
+    this.eventBanner = null;
+    this.bounty = null;
 
     this.player = {
       x: 0, y: 0, vx: 0, vy: 0, aim: -Math.PI / 2,
@@ -137,7 +159,36 @@ export class Game {
     if (s === "boss") this.emit("music", "boss");
     if (s === "victory") this.emit("victory");
     if (s === "defeat") this.emit("defeat");
+    if (s === "between" && this.mode !== "bossrush") this.offerDraft();
   }
+
+  // ---------- perks ----------
+  offerDraft() {
+    const pool = PERKS.filter((p) => !(p.flags && p.flags.every((f) => this.perkFlags.has(f))));
+    const opts = [];
+    let guard = 0;
+    while (opts.length < 3 && guard++ < 60 && pool.length) {
+      const p = pool[simRng.int(0, pool.length - 1)];
+      if (!opts.includes(p) && (!p.rare || simRng.chance(0.5))) opts.push(p);
+    }
+    if (opts.length) { this.pendingDraft = opts; this.emit("sfx", "power"); }
+  }
+
+  applyPerk(perk) {
+    this.perks.push(perk.id);
+    if (perk.mods) {
+      for (const [k, v] of Object.entries(perk.mods)) {
+        if (k === "crit" || k === "magnet" || k === "comboWindow" || k === "pierce") this.perkMods[k] += v;
+        else if (k === "missiles") { this.perkMods.missiles += v; this.player.missiles += v; }
+        else this.perkMods[k] *= v;
+      }
+    }
+    if (perk.flags) perk.flags.forEach((f) => this.perkFlags.add(f));
+    this.pendingDraft = null;
+    this.emit("sfx", "weaponUp");
+  }
+
+  missileCap() { return this.stats.missileMax + this.perkMods.missiles; }
 
   // ---------- spawning ----------
   spawnWaveFromMix(mix, hpRamp = 1) {
@@ -221,10 +272,18 @@ export class Game {
   // ---------- update ----------
   update(dt0, inp, pressed) {
     if (this.state === "idle") return;
+    if (this.pendingDraft) return;                       // world holds its breath during a draft
+    if (this.hitStop > 0) { this.hitStop -= dt0; return; }
     const dt = dt0 * this.slowMo;
     this.time += dt;
     this.stateT += dt;
     const p = this.player;
+
+    // kill-streak window
+    if (this.streakT > 0) { this.streakT -= dt; if (this.streakT <= 0) this.streakCount = 0; }
+    if (this.nearMissT > 0) this.nearMissT -= dt0;
+
+    this.updateEvents(dt);
 
     // mission flow
     this.updateFlow(dt, pressed);
@@ -255,9 +314,56 @@ export class Game {
     this.cam.shake = Math.max(0, this.cam.shake - dt * 26);
     this.planetRot += dt * 0.02;
 
-    // slow-mo cinematic decay
-    if (this.state === "victory" || (this.boss && this.boss.dying > 0)) this.slowMo = Math.max(0.35, this.slowMo - dt0 * 1.5);
-    else this.slowMo = Math.min(1, this.slowMo + dt0 * 2);
+    // slow-mo: cinematic (victory/boss death) or a near-miss pulse
+    const targetSlow = (this.state === "victory" || (this.boss && this.boss.dying > 0)) ? 0.35
+      : this.nearMissT > 0 ? JUICE.nearMissSlow : 1;
+    this.slowMo += (targetSlow - this.slowMo) * Math.min(1, dt0 * 8);
+  }
+
+  // ---------- mid-mission events ----------
+  updateEvents(dt) {
+    if (this.state !== "wave" && this.state !== "boss") { return; }
+    // bounty resolution
+    if (this.bounty) {
+      this.bounty.left -= dt;
+      const got = this.kills - this.bounty.startKills;
+      if (got >= this.bounty.need) {
+        const r = EVENTS.bounty.creditReward;
+        this.creditsEarned += r;
+        this.player.shield = this.stats.maxShield;
+        this.emit("event", "bountyDone", r);
+        this.emit("sfx", "victory");
+        this.bounty = null;
+      } else if (this.bounty.left <= 0) {
+        this.emit("event", "bountyFail");
+        this.bounty = null;
+      }
+    }
+    this.eventT -= dt;
+    if (this.eventT > 0 || this.state !== "wave") return;
+    this.eventT = simRng.range(EVENTS.gap[0], EVENTS.gap[1]);
+    const roll = simRng.next();
+    const p = this.player;
+    if (roll < 0.38) {
+      // supply drop: a beacon crate full of goodies
+      const a = simRng.angle();
+      const x = p.x + Math.cos(a) * 420, y = p.y + Math.sin(a) * 420;
+      this.dropPickup(x, y, "power", 0, POWERUPS[simRng.int(0, POWERUPS.length - 1)]);
+      this.dropPickup(x + 20, y, "credit", 25);
+      this.dropPickup(x - 20, y, "energy");
+      spawnGlow(x, y, 300, 20, GLOW.cyan, 0.8, 16);
+      this.emit("event", "supply");
+      this.emit("sfx", "power");
+    } else if (roll < 0.66) {
+      const t = this.planet >= 8 ? "ghost" : "elite";
+      this.spawnEnemy(t, 1); this.spawnEnemy(this.planet >= 4 ? t : "scout", 1);
+      this.emit("event", "ambush");
+      this.emit("sfx", "alarm");
+    } else {
+      this.bounty = { need: EVENTS.bounty.kills, left: EVENTS.bounty.window, startKills: this.kills };
+      this.emit("event", "bounty", { n: EVENTS.bounty.kills, s: EVENTS.bounty.window });
+      this.emit("sfx", "alarm");
+    }
   }
 
   updateFlow(dt, pressed) {
@@ -347,7 +453,9 @@ export class Game {
     // dodge
     if (p.dodgeCd > 0) p.dodgeCd -= dt;
     if (!noControl && pressed("dodge") && p.dodgeCd <= 0 && p.energy >= WORLD.dodgeCost) {
-      p.dodgeT = WORLD.dodgeTime; p.dodgeCd = WORLD.dodgeCooldown; p.iframes = WORLD.dodgeIFrames;
+      p.dodgeT = WORLD.dodgeTime;
+      p.dodgeCd = WORLD.dodgeCooldown * st.dodgeCdMul * this.perkMods.dodgeCd;
+      p.iframes = WORLD.dodgeIFrames;
       p.energy -= WORLD.dodgeCost;
       const a = (inp.moveX || inp.moveY) ? Math.atan2(inp.moveY, inp.moveX) : p.aim;
       p.vx = Math.cos(a) * WORLD.dodgeSpeed; p.vy = Math.sin(a) * WORLD.dodgeSpeed;
@@ -361,11 +469,13 @@ export class Game {
     p.boosting = false;
     if (!noControl && p.dodgeT <= 0) {
       let ax = inp.moveX, ay = inp.moveY;
-      let accel = st.accel, maxV = st.maxSpeed;
+      let accel = st.accel * this.perkMods.speed, maxV = st.maxSpeed * this.perkMods.speed;
       if (inp.boost && p.energy > 1 && (ax || ay)) {
         p.boosting = true;
         accel *= WORLD.boostMul; maxV *= WORLD.boostMul;
-        p.energy = Math.max(0, p.energy - WORLD.boostDrain * dt);
+        if (!this.perkFlags.has("freeBoost")) {
+          p.energy = Math.max(0, p.energy - WORLD.boostDrain * st.boostCostMul * dt);
+        }
       }
       p.vx += ax * accel * dt; p.vy += ay * accel * dt;
       const v = Math.hypot(p.vx, p.vy);
@@ -391,7 +501,7 @@ export class Game {
     if (p.hitT > WORLD.shieldRegenDelay && p.shield < st.maxShield) {
       p.shield = Math.min(st.maxShield, p.shield + st.shieldRegen * dt);
     }
-    p.energy = Math.min(st.maxEnergy, p.energy + WORLD.energyRegen * dt);
+    p.energy = Math.min(st.maxEnergy, p.energy + WORLD.energyRegen * this.perkMods.energyRegen * dt);
 
     // weapon swap
     if (!noControl) {
@@ -407,7 +517,7 @@ export class Game {
 
     // missiles
     p.missileT += dt;
-    if (p.missiles < st.missileMax && p.missileT > MISSILE.restock) { p.missiles++; p.missileT = 0; }
+    if (p.missiles < this.missileCap() && p.missileT > MISSILE.restock) { p.missiles++; p.missileT = 0; }
     if (!noControl && inp.missile && p.missiles > 0 && (this._mslGap = (this._mslGap || 0)) <= 0) {
       this.fireMissile(); this._mslGap = 0.22;
     }
@@ -416,7 +526,7 @@ export class Game {
     // EMP special
     if (!noControl && pressed("special") && p.energy >= WORLD.empCost) {
       p.energy -= WORLD.empCost;
-      this.empBlast(p.x, p.y, WORLD.empRadius, WORLD.empDamage, WORLD.empStun);
+      this.empBlast(p.x, p.y, WORLD.empRadius * this.perkMods.empRadius, WORLD.empDamage, WORLD.empStun);
     }
   }
 
@@ -425,7 +535,7 @@ export class Game {
     const unlocked = this.unlockedWeapons();
     const w = unlocked[p.weapon] || unlocked[0];
     if (w.energy && p.energy < w.energy) return;
-    let rate = w.rate * st.rateMul * (p.buffs.rapid > 0 ? 1.7 : 1);
+    let rate = w.rate * st.rateMul * this.perkMods.rate * (p.buffs.rapid > 0 ? 1.7 : 1);
     p.fireT = 1 / rate;
     if (w.energy) p.energy -= w.beam ? w.energy / rate * 4 : w.energy;
     const shots = p.buffs.triple > 0 ? 3 : w.shots;
@@ -437,12 +547,12 @@ export class Game {
       b.x = p.x + Math.cos(p.aim) * 26; b.y = p.y + Math.sin(p.aim) * 26;
       b.vx = Math.cos(a) * w.speed + p.vx * 0.3; b.vy = Math.sin(a) * w.speed + p.vy * 0.3;
       b.life = w.life;
-      let dmg = w.dmg * st.dmgMul;
+      let dmg = w.dmg * st.dmgMul * this.perkMods.dmg;
       if (p.buffs.double > 0) dmg *= 2;
-      if (fxRng.next() < st.critChance) { dmg *= 2.2; b.crit = true; } else b.crit = false;
+      if (fxRng.next() < st.critChance + this.perkMods.crit) { dmg *= 2.2; b.crit = true; } else b.crit = false;
       b.dmg = dmg;
-      b.size = w.size; b.friendly = true; b.bomb = 0;
-      b.pierce = w.pierce; b.splash = w.splash; b.hits = 0;
+      b.size = w.size; b.friendly = true; b.bomb = 0; b.bounced = false;
+      b.pierce = w.pierce + this.perkMods.pierce; b.splash = w.splash; b.hits = 0;
       b.glow = w.id === "mg" ? GLOW.cyan : w.id === "laser" ? GLOW.teal : w.id === "plasma" ? GLOW.violet : w.id === "rail" ? GLOW.magenta : GLOW.white;
     }
     this.emit("sfx", w.id === "mg" ? "laser" : w.id === "laser" ? "laser2" : w.id === "plasma" ? "plasma" : w.id === "rail" ? "rail" : "quantum");
@@ -636,23 +746,39 @@ export class Game {
 
   destroyEnemy(e, reward) {
     e.active = false;
-    explosion(e.x, e.y, e.def.score >= 250, e.def.sprite === "drone" ? GLOW.magenta : GLOW.orange);
-    this.emit("sfx", "explode", e.def.score >= 250);
-    this.shake(e.def.score >= 250 ? 5 : 2);
+    const big = e.def.score >= 250;
+    explosion(e.x, e.y, big, e.def.sprite === "drone" ? GLOW.magenta : GLOW.orange);
+    this.emit("sfx", "explode", big);
+    this.shake(big ? 5 : 2);
+    if (big) this.hitStop = Math.max(this.hitStop, JUICE.hitStopBig);
     if (!reward) return;
     this.kills++;
     this.emit("kill", this.kills);
+    // kill streak
+    this.streakCount++;
+    this.streakT = JUICE.streakWindow;
+    if (this.streakCount >= 2) this.emit("streak", this.streakCount);
+    // perk hooks
+    const p = this.player, st = this.stats;
+    if (this.perkFlags.has("lifesteal")) p.hull = Math.min(st.maxHull, p.hull + 2);
+    if (this.perkFlags.has("shieldOnKill")) p.shield = Math.min(st.maxShield, p.shield + 3);
+    if (this.perkFlags.has("splitOnKill") && !this._splitting) {
+      this._splitting = true;
+      spawnGlow(e.x, e.y, 160, 6, GLOW.cyan, 0.3, 12);
+      this.splashDamage(e.x, e.y, 80, 14 * this.perkMods.dmg);
+      this._splitting = false;
+    }
     this.combo = Math.min(WORLD.comboMax, this.combo + 1);
-    this.comboT = WORLD.comboWindow;
+    this.comboT = WORLD.comboWindow + this.perkMods.comboWindow;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     if (this.combo >= 8) this.emit("achieve", "combo8");
     this.addScore(e.def.score);
     // drops
-    const r = this.diff.reward * this.ngMul.reward;
+    const r = this.diff.reward * this.ngMul.reward * this.perkMods.drops;
     this.dropPickup(e.x, e.y, "credit", Math.max(1, Math.round(e.def.credit * r)));
     if (simRng.chance(0.3)) this.dropPickup(e.x + 14, e.y, "crystal");
     if (simRng.chance(0.12)) this.dropPickup(e.x - 14, e.y, "energy");
-    if (simRng.chance(POWERUP_DROP)) this.dropPickup(e.x, e.y + 14, "power", 0, POWERUPS[simRng.int(0, POWERUPS.length - 1)]);
+    if (simRng.chance(POWERUP_DROP * this.perkMods.drops)) this.dropPickup(e.x, e.y + 14, "power", 0, POWERUPS[simRng.int(0, POWERUPS.length - 1)]);
     const artChance = e.def.score >= 500 ? 0.1 : ARTIFACT_DROP;
     if (simRng.chance(artChance)) this.dropPickup(e.x, e.y - 14, "artifact");
   }
@@ -673,7 +799,7 @@ export class Game {
 
   updatePickups(dt) {
     const p = this.player, st = this.stats;
-    const magnetR = st.magnetR * (p.buffs.magnet > 0 ? 3 : 1);
+    const magnetR = (st.magnetR + this.perkMods.magnet) * (p.buffs.magnet > 0 ? 3 : 1);
     this.pickups.each((pk) => {
       pk.t -= dt;
       if (pk.t <= 0) { pk.active = false; return; }
@@ -712,7 +838,7 @@ export class Game {
     switch (kind) {
       case "health": p.hull = Math.min(st.maxHull, p.hull + st.maxHull * 0.3); break;
       case "shield": p.shield = st.maxShield; break;
-      case "emp": this.empBlast(p.x, p.y, WORLD.empRadius, WORLD.empDamage, WORLD.empStun); break;
+      case "emp": this.empBlast(p.x, p.y, WORLD.empRadius * this.perkMods.empRadius, WORLD.empDamage, WORLD.empStun); break;
       case "nuke": {
         this.emit("sfx", "nuke");
         this.shake(16);
@@ -772,10 +898,15 @@ export class Game {
         });
       } else {
         // vs player
-        if (p.alive && p.iframes <= 0 && dist(p.x, p.y, b.x, b.y) < 16 + b.size) {
+        const pd = dist(p.x, p.y, b.x, b.y);
+        if (p.alive && p.iframes <= 0 && pd < 16 + b.size) {
           this.hurtPlayer(b.dmg);
           b.active = false;
           spawnSpark(b.x, b.y, 180, 5, GLOW.green, 0.3);
+        } else if (p.alive && p.iframes > 0 && pd < 40 + b.size && this.nearMissT <= 0) {
+          // dodged through a bullet: brief slow-mo reward
+          this.nearMissT = JUICE.nearMissTime;
+          this.emit("closeCall");
         }
       }
     });
@@ -786,10 +917,32 @@ export class Game {
   hitEnemy(b, e) {
     this.damageEnemy(e, b.dmg);
     spawnSpark(b.x, b.y, 200, 4, b.glow, 0.3);
-    if (b.crit) floatText(b.x, b.y, Math.round(b.dmg) + "!", "#ffd75c");
+    if (b.crit) floatText(b.x, b.y, Math.round(b.dmg) + "!", "#ffd75c", 15);
+    else floatText(b.x, b.y, String(Math.round(b.dmg)), "rgba(230,240,255,0.85)", 11);
+    // knockback scales with damage
+    const kv = Math.hypot(b.vx, b.vy) || 1;
+    const kb = Math.min(220, b.dmg * 4);
+    e.vx += b.vx / kv * kb; e.vy += b.vy / kv * kb;
     if (b.splash) this.splashDamage(b.x, b.y, b.splash, b.dmg * 0.6);
     b.hits++;
-    if (b.hits > b.pierce) b.active = false;
+    if (b.hits > b.pierce) {
+      // ricochet: one bounce toward the nearest other enemy
+      if (this.perkFlags.has("ricochet") && !b.bounced) {
+        let best = null, bd = 480 * 480;
+        this.enemies.each((o) => {
+          if (o === e) return;
+          const d2 = (o.x - b.x) ** 2 + (o.y - b.y) ** 2;
+          if (d2 < bd) { bd = d2; best = o; }
+        });
+        if (best) {
+          const a = Math.atan2(best.y - b.y, best.x - b.x);
+          const sp = Math.hypot(b.vx, b.vy);
+          b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
+          b.bounced = true; b.hits = 0; b.life = Math.max(b.life, 0.5);
+          spawnGlow(b.x, b.y, 80, 3, b.glow, 0.25, 8);
+        } else b.active = false;
+      } else b.active = false;
+    }
     this.emit("sfx", "hit");
   }
 
@@ -837,8 +990,8 @@ export class Game {
       if (best && dist(best.x, best.y, m.x, m.y) < (best.r || 20) + 10) boom = true;
       if (boom) {
         m.active = false;
-        const dmg = MISSILE.dmg * this.stats.dmgMul * (this.player.buffs.double > 0 ? 2 : 1);
-        this.splashDamage(m.x, m.y, MISSILE.splash, dmg);
+        const dmg = MISSILE.dmg * this.stats.dmgMul * this.perkMods.dmg * (this.player.buffs.double > 0 ? 2 : 1);
+        this.splashDamage(m.x, m.y, MISSILE.splash * this.perkMods.missileSplash, dmg);
         explosion(m.x, m.y, false, GLOW.orange);
         this.emit("sfx", "explode", false);
         this.shake(3);
@@ -932,6 +1085,7 @@ export class Game {
         explosion(b.x, b.y, true, GLOW.white);
         explosion(b.x, b.y, true, GLOW.orange);
         this.shake(18);
+        this.hitStop = Math.max(this.hitStop, JUICE.hitStopBoss);
         this.boss = null;
         this.onBossDead();
       }
@@ -955,6 +1109,7 @@ export class Game {
     if (phase !== b.phase) {
       b.phase = phase;
       b.flash = 0.5;
+      this.hitStop = Math.max(this.hitStop, JUICE.hitStopBig);
       this.emit("sfx", "alarm");
       this.shake(8);
       // phase-change burst
@@ -1073,10 +1228,11 @@ export class Game {
       this.rushIdx++;
       this.addScore(3000);
       if (this.rushIdx >= 10) { this.setState("victory"); this.emit("achieve", "bossRush"); return; }
-      // heal between bosses
+      // heal + draft between bosses
       const p = this.player, st = this.stats;
       p.hull = Math.min(st.maxHull, p.hull + st.maxHull * 0.35);
       p.shield = st.maxShield;
+      this.offerDraft();
       this.setState("bossWarn");
     } else if (this.mode === "endless") {
       this.emit("music", "combat");

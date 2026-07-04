@@ -1,0 +1,15 @@
+{
+  "name": "Space Frontier: Alien War",
+  "short_name": "Space Frontier",
+  "description": "Humanity's last hope flies alone. A cinematic space shooter: 10-planet campaign, boss battles, upgrades, endless survival.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0a0a1e",
+  "theme_color": "#0a0a1e",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

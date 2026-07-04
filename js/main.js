@@ -4,9 +4,9 @@ import { buildAtlas, planetSprite, vignette } from "./art.js";
 import { Game, derivedStats, upgradeCost } from "./game.js";
 import { UI } from "./ui.js";
 import { input } from "./input.js";
-import { save, loadSettings, storeSettings } from "./save.js";
+import { save, loadSettings, storeSettings, dailyDate, dailyRecord, storeDaily } from "./save.js";
 import { initAudio, resumeAudio, playMusic, stopMusic, setVolumes, SFX } from "./audio.js";
-import { SKINS, WEAPONS, PERF } from "./data.js";
+import { SKINS, WEAPONS, PERF, STAR_PAR } from "./data.js";
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -40,7 +40,25 @@ const app = {
     initAudio(settings);
     resumeAudio();
     playMusic("menu");
+    // first visit: skip menus — straight into the story
+    if (!this.hasAnySave()) {
+      profile = save.create(0, "normal");
+      activeSlot = 0;
+      ui.introIdx = 0;
+      ui.launchAfterIntro = true;
+      ui.go("intro");
+      return;
+    }
     ui.go("menu");
+  },
+
+  dailyBest() { const r = dailyRecord(); return r.best > 0 ? r.best : null; },
+  totalStars() {
+    if (!profile) return 0;
+    return Object.values(profile.stars || {}).reduce((a, b) => a + b, 0);
+  },
+  vibrate(ms) {
+    if (settings.haptics && navigator.vibrate) navigator.vibrate(ms);
   },
   sfx(name, arg) { if (SFX[name]) SFX[name](arg); },
   hasAnySave() { return save.slots().some(Boolean); },
@@ -55,6 +73,11 @@ const app = {
       case "map": ui.go("map"); break;
       case "endless": this.launch({ mode: "endless", planet: Math.max(1, profile.planetsCleared.length) - 0 }); break;
       case "bossrush": this.launch({ mode: "bossrush", planet: 9 }); break;
+      case "daily": {
+        const seed = parseInt(dailyDate(), 10) ^ 0x5F3759DF;
+        this.launch({ mode: "daily", planet: (seed >>> 3) % 9 + 1, seed });
+        break;
+      }
       case "hangar": ui.go("hangar"); break;
       case "ach": ui.go("achievements"); break;
       case "settings": ui.pauseReturn = false; ui.go("settings"); break;
@@ -75,7 +98,14 @@ const app = {
     ui.go("intro");
   },
 
-  introDone() { ui.go("map"); },
+  introDone() {
+    if (ui.launchAfterIntro) {
+      ui.launchAfterIntro = false;
+      this.launch({ mode: "story", planet: 0 });
+      return;
+    }
+    ui.go("map");
+  },
 
   launchStory(planetIdx) { this.launch({ mode: "story", planet: planetIdx }); },
 
@@ -181,12 +211,19 @@ function unlockSkins() {
 // ---------- game events ----------
 function emit(type, a, b) {
   switch (type) {
-    case "sfx": app.sfx(a, b); break;
+    case "sfx":
+      app.sfx(a, b);
+      if (a === "explode") app.vibrate(b ? 45 : 18);
+      if (a === "emp" || a === "nuke") app.vibrate(60);
+      break;
     case "music": playMusic(a); break;
-    case "bossWarn": SFX.alarm(); break;
-    case "bossDown": SFX.bossDown(); if (profile) { profile.stats.bossKills++; } break;
+    case "bossWarn": SFX.alarm(); app.vibrate([40, 60, 40]); break;
+    case "bossDown": SFX.bossDown(); app.vibrate([60, 40, 80]); if (profile) { profile.stats.bossKills++; } break;
     case "victory": SFX.victory(); break;
-    case "defeat": SFX.defeat(); stopMusic(); break;
+    case "defeat": SFX.defeat(); stopMusic(); app.vibrate(120); break;
+    case "streak": ui.streak(a); break;
+    case "closeCall": ui.closeCall(); break;
+    case "event": ui.event(a, b); break;
     case "wave": break;
     case "kill":
       if (!profile) break;
@@ -231,11 +268,15 @@ function checkMissionEnd() {
     [STR.results.creditsEarned, creditGain, "#ffd75c"],
     [STR.results.crystalsEarned, game.crystalsEarned, "#ff5ad1"],
   ];
-  let record = false, firstClear = false;
+  let record = false, firstClear = false, stars;
 
   if (mode === "story" && win) {
     firstClear = !profile.planetsCleared.includes(missionOpts.planet);
     if (firstClear) profile.planetsCleared.push(missionOpts.planet);
+    // star rating: clear + no damage + under par time
+    stars = 1 + (!game.tookDamage ? 1 : 0) + (game.time <= (STAR_PAR[missionOpts.planet] || 200) ? 1 : 0);
+    profile.stars = profile.stars || {};
+    profile.stars[missionOpts.planet] = Math.max(profile.stars[missionOpts.planet] || 0, stars);
     // weapon unlocks by planets cleared
     for (const w of WEAPONS) {
       if (w.unlockPlanet <= profile.planetsCleared.length && !profile.weaponsUnlocked.includes(w.id)) {
@@ -261,6 +302,14 @@ function checkMissionEnd() {
     lines.push([STR.results.bestWave, profile.endlessBestWave]);
     lines.push([STR.results.highScore, profile.endlessBestScore]);
   }
+  if (mode === "daily") {
+    const r = dailyRecord();
+    r.attempts++;
+    if (game.score > r.best) { r.best = game.score; record = true; }
+    storeDaily(r);
+    if (game.endlessWave >= 10) award("endless10");
+    lines.push([STR.menu.dailyBest, r.best, "#ffd75c"]);
+  }
   if (mode === "bossrush" && win) profile.bossRushDone = true;
 
   unlockSkins();
@@ -268,12 +317,13 @@ function checkMissionEnd() {
 
   ui.results = {
     outcome: win ? "victory" : "defeat",
-    title: win ? STR.results.victory : (mode === "endless" ? STR.results.endlessOver : STR.results.defeat),
+    title: win ? STR.results.victory : (mode === "endless" || mode === "daily" ? STR.results.endlessOver : STR.results.defeat),
     lines,
     perfect: win && !game.tookDamage,
     record,
     mode,
     firstClear,
+    stars,
   };
   ui.go("results");
 }
@@ -348,6 +398,11 @@ function frame(now) {
 
 resize();
 requestAnimationFrame(frame);
+
+// PWA: offline cache + installability (no-op during local file testing)
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("./sw.js").catch(() => { /* offline play just won't be available */ });
+}
 
 // Dev harness: manually advance N frames when rAF is throttled (hidden tabs).
 if (dev) {

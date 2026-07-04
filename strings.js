@@ -12,6 +12,8 @@ export const STR = {
     galaxyMap: "GALAXY MAP",
     endless: "ENDLESS SURVIVAL",
     bossRush: "BOSS RUSH",
+    daily: "DAILY RUN",
+    dailyBest: "TODAY'S BEST",
     hangar: "HANGAR",
     achievements: "ACHIEVEMENTS",
     settings: "SETTINGS",
@@ -32,9 +34,48 @@ export const STR = {
     sfx: "SFX VOLUME",
     shake: "SCREEN SHAKE",
     flash: "REDUCED FLASH",
+    haptics: "VIBRATION (MOBILE)",
     on: "ON",
     off: "OFF",
   },
+
+  perks: {
+    title: "SYSTEM UPGRADE DETECTED — CHOOSE ONE",
+    overcharge:  { name: "OVERCHARGE",    desc: "+15% weapon damage" },
+    hairTrigger: { name: "HAIR TRIGGER",  desc: "+15% fire rate" },
+    deadeye:     { name: "DEADEYE",       desc: "+8% critical chance" },
+    afterburner: { name: "AFTERBURNER",   desc: "+12% engine speed" },
+    tractor:     { name: "TRACTOR FIELD", desc: "Much wider pickup range" },
+    capacitor:   { name: "CAPACITOR",     desc: "+50% energy regen" },
+    reflexes:    { name: "REFLEXES",      desc: "Dodge recharges 30% faster" },
+    salvage:     { name: "SALVAGE RIG",   desc: "+35% credit drops" },
+    comboCore:   { name: "COMBO CORE",    desc: "Combo lasts 1.5s longer" },
+    warheads:    { name: "HEAVY WARHEADS",desc: "+40% missile blast radius" },
+    piercing:    { name: "PIERCING ROUNDS", desc: "Shots pierce +1 enemy" },
+    vampiric:    { name: "VAMPIRIC HULL", desc: "Kills repair 2 hull" },
+    aegis:       { name: "AEGIS PROTOCOL",desc: "Kills restore 3 shield" },
+    ricochet:    { name: "RICOCHET",      desc: "Shots bounce to a nearby enemy" },
+    splitShot:   { name: "FISSION ROUNDS",desc: "Kills trigger a small explosion" },
+    freeBoost:   { name: "COLD FUSION",   desc: "Boost costs no energy" },
+    twinMissile: { name: "TWIN RACK",     desc: "+1 missile stock" },
+    empAmp:      { name: "EMP AMPLIFIER", desc: "+40% EMP radius" },
+  },
+
+  streaks: ["", "", "DOUBLE KILL", "TRIPLE KILL", "QUAD KILL", "RAMPAGE!", "MASSACRE!", "UNSTOPPABLE!"],
+  closeCall: "CLOSE CALL!",
+
+  events: {
+    supply: "SUPPLY DROP INBOUND",
+    ambush: "⚠ ELITE AMBUSH ⚠",
+    bounty: "BOUNTY: DESTROY {n} IN {s}s",
+    bountyDone: "BOUNTY COMPLETE",
+    bountyFail: "BOUNTY LOST",
+  },
+
+  bossCard: { threat: "THREAT LEVEL" },
+
+  stars: { earned: "STARS", par: "PAR TIME", total: "TOTAL STARS" },
+  daily: { title: "DAILY RUN", desc: "One shared galaxy per day. Stock loadout — skill only. Perks still drop.", newBest: "NEW DAILY BEST!" },
 
   hud: {
     hull: "HULL",
@@ -93,7 +134,7 @@ export const STR = {
     missiles: "MISSILE BAY",
     energy: "ENERGY CORE",
     magnet: "TRACTOR RADIUS",
-    skins: "SKINS",
+    skins: "SHIPS",
     max: "MAX",
     cost: "COST",
     owned: "EQUIPPED",
@@ -103,15 +144,22 @@ export const STR = {
   },
 
   skins: {
-    frontier: "FRONTIER WHITE",
+    frontier: "FRONTIER",
     crimson: "CRIMSON FANG",
-    solar: "SOLAR GOLD",
-    void: "VOID SHADOW",
+    solar: "SUNFORGE",
+    void: "UMBRA",
     aurora: "AURORA PRIME",
     skinHintCrimson: "Clear 3 planets",
     skinHintSolar: "Reach a x8 combo",
     skinHintVoid: "Survive 10 endless waves",
     skinHintAurora: "Save the galaxy",
+    shipDesc: {
+      frontier: "Balanced strike craft",
+      crimson: "Fast glass cannon · quick dodge",
+      solar: "Heavy tank · +2 missiles · slow",
+      void: "Kills repair the hull",
+      aurora: "Superior everything · cheap boost",
+    },
   },
 
   planets: [
