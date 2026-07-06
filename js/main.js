@@ -338,7 +338,9 @@ const STEP = 1000 / 60;
 let acc = 0, last = performance.now();
 let frames = 0, fpsAt = last, fps = 0;
 const devEl = document.getElementById("dev");
-const dev = new URLSearchParams(location.search).has("dev");
+const params = new URLSearchParams(location.search);
+const dev = params.has("dev");
+const shot = params.get("shot");    // headless screenshot rig: title|menu|map|hangar|combat|boss
 if (dev) devEl.style.display = "block";
 
 // Missions auto-pause on blur; the render loop keeps running so the screen
@@ -357,6 +359,13 @@ function frame(now) {
   if (acc > 200) acc = 200; // spiral-of-death guard
 
   input.poll(W, H);
+  if (shot === "combat" && game) {
+    // screenshot autopilot: orbit and fire
+    const t = now / 1000;
+    input.state.moveX = Math.cos(t * 0.8); input.state.moveY = Math.sin(t * 0.8) * 0.6;
+    input.state.aimX = W / 2 + Math.cos(t * 1.7) * 260; input.state.aimY = H / 2 + Math.sin(t * 1.7) * 260;
+    input.state.hasAim = true; input.state.fire = true;
+  }
   resumeAudio();
 
   // pause toggle
@@ -402,6 +411,26 @@ requestAnimationFrame(frame);
 // PWA: offline cache + installability (no-op during local file testing)
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("./sw.js").catch(() => { /* offline play just won't be available */ });
+}
+
+// Screenshot rig: jump straight to a staged scene (?shot=…), used by headless capture only.
+if (shot) {
+  profile = save.get(0) || save.create(0, "normal");
+  activeSlot = 0;
+  if (shot === "menu") ui.go("menu");
+  else if (shot === "map") { profile.planetsCleared = [0, 1, 2, 3]; profile.stars = { 0: 3, 1: 2, 2: 3, 3: 1 }; ui.go("map"); }
+  else if (shot === "hangar") { profile.credits = 1240; profile.crystals = 87; ui.go("hangar"); }
+  else if (shot === "combat") {
+    app.launch({ mode: "story", planet: 2 });
+    setTimeout(() => { for (let i = 0; i < 760; i++) { last -= STEP; frame(performance.now()); } }, 800);
+  } else if (shot === "boss") {
+    app.launch({ mode: "story", planet: 4 });
+    setTimeout(() => {
+      if (!game) return;
+      game.enemies.clear(); game.setState("bossWarn");
+      for (let i = 0; i < 560; i++) { last -= STEP; frame(performance.now()); }
+    }, 800);
+  }
 }
 
 // Dev harness: manually advance N frames when rAF is throttled (hidden tabs).

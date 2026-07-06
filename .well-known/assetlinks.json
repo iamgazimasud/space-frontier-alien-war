@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.iamgazimasud.spacefrontier",
+      "sha256_cert_fingerprints": [
+        "11:BB:B6:75:B6:7C:94:0F:39:B7:5F:11:DC:4B:CD:63:39:F5:38:78:47:70:9F:CF:8D:11:C6:E8:20:F3:23:34"
+      ]
+    }
+  }
+]
