@@ -24,6 +24,31 @@ function resize() {
 addEventListener("resize", resize);
 addEventListener("orientationchange", resize);
 
+// On mobile browsers the URL bar stays visible unless the page goes fullscreen.
+// The Fullscreen API only works from inside a real user-gesture handler, so we
+// arm one-shot capture listeners on the first tap/key. Best-effort: unsupported
+// browsers (notably iOS Safari) simply ignore it, and "Add to home screen" /
+// the installed app already run fullscreen via the manifest.
+function enterFullscreen() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) return;
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if (!req) return;
+  try { const p = req.call(el, { navigationUI: "hide" }); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+}
+let _fsArmed = true;
+function _firstGesture() {
+  if (!_fsArmed) return;
+  _fsArmed = false;
+  enterFullscreen();
+  removeEventListener("pointerdown", _firstGesture, true);
+  removeEventListener("touchend", _firstGesture, true);
+  removeEventListener("keydown", _firstGesture, true);
+}
+addEventListener("pointerdown", _firstGesture, { capture: true, passive: true });
+addEventListener("touchend", _firstGesture, { capture: true, passive: true });
+addEventListener("keydown", _firstGesture, true);
+
 // ---------- app state ----------
 const settings = loadSettings();
 let profile = null;
