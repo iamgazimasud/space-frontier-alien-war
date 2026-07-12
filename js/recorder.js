@@ -88,28 +88,71 @@ export function clearClip() {
   if (clipUrl) { URL.revokeObjectURL(clipUrl); clipUrl = null; }
 }
 
-function download() {
-  if (!hasClip()) return;
-  const a = document.createElement("a");
-  a.href = clipUrl;
-  a.download = `space-frontier-clip.${fileExt()}`;
-  document.body.appendChild(a); a.click(); a.remove();
+function isMobile() { return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || ""); }
+function makeFile() { return new File([clipBlob], `space-frontier-clip.${fileExt()}`, { type: clipBlob.type || "video/webm" }); }
+
+// Direct download via <a download>. Reliable on desktop; silently ignored inside
+// Android apps / TWAs — callers must have a fallback there.
+function downloadLink() {
+  if (!hasClip()) return false;
+  try {
+    const a = document.createElement("a");
+    a.href = clipUrl;
+    a.download = `space-frontier-clip.${fileExt()}`;
+    a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+    return true;
+  } catch (e) { return false; }
 }
 
-async function share() {
-  if (!hasClip()) return;
+function openInTab() {
+  try { return !!window.open(clipUrl, "_blank"); } catch (e) { return false; }
+}
+
+// Native OS share sheet with the video file — the reliable path on Android/iOS.
+// Returns a status string, or null if file-sharing isn't available at all.
+async function nativeShare() {
+  if (!navigator.share) return null;
+  const file = makeFile();
+  let canFiles = true;
+  try { if (navigator.canShare) canFiles = navigator.canShare({ files: [file] }); } catch (e) { canFiles = true; }
+  if (!canFiles) return null;
   try {
-    const file = new File([clipBlob], `space-frontier-clip.${fileExt()}`, { type: clipBlob.type });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        files: [file],
-        title: "Space Frontier: Alien War",
-        text: "My run in Space Frontier: Alien War 🚀 Play free:",
-      });
-      return;
-    }
-  } catch (e) { /* user cancelled or share failed — fall through to download */ }
-  download();
+    await navigator.share({
+      files: [file],
+      title: "Space Frontier: Alien War",
+      text: "My run in Space Frontier: Alien War 🚀 Play free: https://space-frontier-alien-war.vercel.app",
+    });
+    return "Shared!";
+  } catch (e) {
+    if (e && e.name === "AbortError") return "";      // user dismissed the sheet — not an error
+    return null;                                       // share failed — let caller fall back
+  }
+}
+
+// SHARE button: prefer the native share sheet, then fall back.
+async function share() {
+  if (!hasClip()) return "No clip yet — play a mission first.";
+  const s = await nativeShare();
+  if (s !== null) return s;
+  if (!isMobile() && downloadLink()) return "Saved to your downloads.";
+  if (openInTab()) return "Video opened in a new tab — long-press it to save or share.";
+  return "Sharing isn't supported on this device.";
+}
+
+// SAVE button: on mobile a direct download does nothing inside an app, so use the
+// share sheet (it has Save to Files / Photos / Drive). Desktop gets a real download.
+async function save() {
+  if (!hasClip()) return "No clip yet — play a mission first.";
+  if (isMobile()) {
+    const s = await nativeShare();
+    if (s !== null) return s === "Shared!" ? "Saved / shared!" : s;
+    if (openInTab()) return "Video opened in a new tab — long-press it to save.";
+    return "Couldn't save on this device.";
+  }
+  if (downloadLink()) return "Saved to your downloads.";
+  if (openInTab()) return "Video opened in a new tab — right-click to save.";
+  return "Couldn't save on this device.";
 }
 
 // Build (once) and show the replay overlay. onClose fires when the user dismisses it.
@@ -118,6 +161,7 @@ export function showReplay(onClose) {
   if (!overlay) overlay = buildOverlay();
   const video = overlay.querySelector("video");
   video.src = clipUrl;
+  if (overlay._status) overlay._status.textContent = "";
   overlay.style.display = "flex";
   overlay._onClose = onClose;
   try { video.currentTime = 0; video.play().catch(() => {}); } catch (e) {}
@@ -160,13 +204,19 @@ function buildOverlay() {
   hint.style.cssText = "color:#9fb2dd;font:400 13px system-ui,sans-serif;text-align:center;";
   o.appendChild(hint);
 
+  const status = document.createElement("div");
+  status.style.cssText = "color:#41f7d2;font:600 13px system-ui,sans-serif;text-align:center;min-height:18px;transition:opacity .2s;";
+  o.appendChild(status);
+  o._status = status;
+
   const row = document.createElement("div");
   row.style.cssText = "display:flex;flex-wrap:wrap;gap:12px;width:100%;max-width:520px;";
   const bShare = document.createElement("button"); bShare.textContent = "SHARE"; btnStyle(bShare, "#41f7d2");
   const bSave = document.createElement("button"); bSave.textContent = "SAVE VIDEO"; btnStyle(bSave, "#ffd75c");
   const bClose = document.createElement("button"); bClose.textContent = "CLOSE"; btnStyle(bClose, "#9fb2dd");
-  bShare.onclick = share;
-  bSave.onclick = download;
+  const setStatus = (t) => { if (t) status.textContent = t; };
+  bShare.onclick = async () => { setStatus("Opening share…"); setStatus(await share()); };
+  bSave.onclick = async () => { setStatus("Saving…"); setStatus(await save()); };
   bClose.onclick = hideReplay;
   row.append(bShare, bSave, bClose);
   o.appendChild(row);
