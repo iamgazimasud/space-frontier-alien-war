@@ -27,6 +27,7 @@ export class UI {
     this.pendingDiffSlot = -1;
     this.results = null;
     this.endingIdx = 0;
+    this.endingSet = "ending";
     this.radarOut = [];
     this.heroPreview = null;
     this.stars = Array.from({ length: 90 }, () => ({ x: Math.random(), y: Math.random(), s: Math.random() }));
@@ -390,14 +391,16 @@ export class UI {
     g.fillText(STR.map.title, Math.max(w / 2, 140 + mtw / 2), 40);
 
     const cleared = profile.planetsCleared;
-    const maxIdx = PLANETS.length - 1;
-    const visible = profile.hiddenUnlocked ? 11 : 10;
-    // winding path layout
-    const cols = Math.min(5, Math.max(3, Math.floor(w / 190)));
-    const cellW = Math.min(180, (w - 60) / cols);
+    const maxIdx = PLANETS.length - 1;           // hidden world is the last index
+    const visible = profile.hiddenUnlocked ? PLANETS.length : PLANETS.length - 1;
+    // winding path layout — grid must fit between the title and the briefing panel
+    const cols = Math.min(6, Math.max(3, Math.floor(w / 150)));
+    const cellW = Math.min(170, (w - 60) / cols);
     const startX = w / 2 - (cols * cellW) / 2 + cellW / 2;
     const rows = Math.ceil(visible / cols);
-    const cellH = Math.min(120, (h - 240) / rows);
+    const gridTop = 96;
+    const gridBottom = h - (w < 560 ? 210 : 170);   // leave room for the briefing panel
+    const cellH = Math.max(56, Math.min(116, (gridBottom - gridTop) / rows));
     // connecting line
     g.save();
     g.strokeStyle = "rgba(125,224,255,0.3)"; g.lineWidth = 2; g.setLineDash([5, 7]);
@@ -412,7 +415,7 @@ export class UI {
     for (let i = 0; i < visible; i++) {
       const { x, y } = nodePos(i);
       const done = cleared.includes(i);
-      const unlocked = i === 0 || cleared.includes(i - 1) || done || (i === 10 && profile.hiddenUnlocked);
+      const unlocked = i === 0 || cleared.includes(i - 1) || done || (i === maxIdx && profile.hiddenUnlocked);
       const idx = this.widgets.length;
       this.widgets.push({ id: "p" + i, x: x - 34, y: y - 34, w: 68, h: 68, disabled: !unlocked });
       const focused = this.focus === idx;
@@ -473,7 +476,7 @@ export class UI {
       const r = Math.floor(i / cols);
       let c = i % cols;
       if (r % 2 === 1) c = cols - 1 - c;   // serpentine
-      return { x: startX + c * cellW, y: 110 + r * cellH };
+      return { x: startX + c * cellW, y: gridTop + cellH / 2 + r * cellH };
     }
   }
 
@@ -1027,13 +1030,20 @@ export class UI {
       for (let i = 0; i < 14; i++) g.fillRect((fxRng.next() - 0.5) * 400, ((this.t * 300 + i * 46) % 400) - 200, 1.5, 10);
     }
     g.restore();
+    const lines = STR[this.endingSet] || STR.ending;
+    const statsLabel = this.endingSet === "ending2" ? STR.ending2Stats : STR.endingStats;
     g.fillStyle = "#dfe7ff"; g.font = `19px ${FONT}`; g.textAlign = "center";
-    wrapText(g, STR.ending[slide], cx, h - 150, Math.min(640, w - 60), 26);
-    if (slide === STR.ending.length - 1) {
+    wrapText(g, lines[slide], cx, h - 150, Math.min(640, w - 60), 26);
+    if (slide === lines.length - 1) {
       g.fillStyle = PAL.gold; g.font = `bold 20px ${FONT}`;
-      g.fillText(`${STR.endingStats} — ${STR.results.score}: ${profile ? profile.stats.lastCampaignScore || "" : ""}`, cx, h - 110);
-      if (this.button(g, "ng", cx - 250, h - 76, 230, 44, STR.menu.ngPlus)) this.app.startNgPlus();
-      if (this.button(g, "done", cx + 20, h - 76, 230, 44, STR.results.tapToContinue)) this.app.endingDone();
+      g.fillText(`${statsLabel} — ${STR.results.score}: ${profile ? profile.stats.lastCampaignScore || "" : ""}`, cx, h - 110);
+      // New Game+ only after the true finale — the Act I ending just continues into Act II.
+      if (this.endingSet === "ending2") {
+        if (this.button(g, "ng", cx - 250, h - 76, 230, 44, STR.menu.ngPlus)) this.app.startNgPlus();
+        if (this.button(g, "done", cx + 20, h - 76, 230, 44, STR.results.tapToContinue)) this.app.endingDone();
+      } else {
+        if (this.button(g, "done", cx - 115, h - 76, 230, 44, STR.results.tapToContinue)) this.app.endingDone();
+      }
     } else {
       if (this.button(g, "next", cx - 65, h - 76, 130, 40, "▶")) { this.endingIdx++; this.app.sfx("ui"); }
     }

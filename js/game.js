@@ -144,6 +144,11 @@ export class Game {
     if (pdef.hazard === "gravity") {
       for (let i = 0; i < 3; i++) this.wells.push({ x: simRng.range(-1400, 1400), y: simRng.range(-1400, 1400), r: 340, pull: 260 });
     }
+    if (pdef.hazard === "blackhole") {
+      // one massive central singularity plus two smaller drifting wells
+      this.wells.push({ x: 0, y: 0, r: 520, pull: 520 });
+      for (let i = 0; i < 2; i++) this.wells.push({ x: simRng.range(-1500, 1500), y: simRng.range(-1500, 1500), r: 360, pull: 300 });
+    }
     if (pdef.hazard === "asteroids" || this.planet === 3) this.spawnAsteroidField(10);
     if (pdef.hazard === "spores") {
       for (let i = 0; i < 5; i++) this.clouds.push({ x: simRng.range(-1600, 1600), y: simRng.range(-1600, 1600), r: simRng.range(160, 260), vx: simRng.range(-20, 20), vy: simRng.range(-20, 20) });
@@ -1209,6 +1214,35 @@ export class Game {
       b.x = this.player.x + Math.cos(simRng.angle()) * 500;
       b.y = this.player.y + Math.sin(simRng.angle()) * 500;
       spawnGlow(b.x, b.y, 300, 20, GLOW.violet, 0.5, 18);
+    } else if (pat === "cross") {
+      // four rotating arms of bullets
+      const arms = 4, per = 3 + b.phase;
+      for (let a = 0; a < arms; a++) {
+        const base = b.spiralA + a * (TAU / arms);
+        for (let i = 0; i < per; i++) this.spawnEnemyBullet(b.x, b.y, base, 300 + i * 90, def.dmg);
+      }
+      b.spiralA += 0.42;
+      this.emit("sfx", "enemyShot");
+    } else if (pat === "wall") {
+      // a dense wall aimed at the player with a small gap to dodge through
+      const n = 16 + b.phase * 2, spanA = 1.1, gap = simRng.int(2, n - 3);
+      for (let i = 0; i < n; i++) {
+        if (i === gap || i === gap + 1) continue;
+        this.spawnEnemyBullet(b.x, b.y, aimA + (i / (n - 1) - 0.5) * spanA, 360, def.dmg);
+      }
+      this.emit("sfx", "enemyShot");
+    } else if (pat === "nova") {
+      // two expanding rings at different speeds, offset
+      const n = 16 + b.phase * 2;
+      for (let i = 0; i < n; i++) {
+        this.spawnEnemyBullet(b.x, b.y, (i / n) * TAU, 210, def.dmg);
+        this.spawnEnemyBullet(b.x, b.y, (i / n) * TAU + Math.PI / n, 330, def.dmg);
+      }
+      this.emit("sfx", "plasma");
+    } else if (pat === "snipe") {
+      // three fast precise shots straight at the player
+      for (let i = 0; i < 3; i++) this.spawnEnemyBullet(b.x, b.y, aimA + (i - 1) * 0.05, 620, def.dmg * 1.1);
+      this.emit("sfx", "enemyShot");
     } else if (pat.startsWith("spawn:")) {
       const type = pat.slice(6);
       const n = 2 + Math.floor(b.phase / 2);

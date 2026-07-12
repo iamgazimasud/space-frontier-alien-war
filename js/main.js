@@ -139,8 +139,10 @@ const app = {
     const planet = missionOpts.planet;
     game = null;
     if (wasStory && ui.results.outcome === "victory") {
-      if (planet === 9 && ui.results.firstClear) {
+      // Act I finale (planet 9) and Act II finale (planet 19) each play a cutscene.
+      if ((planet === 9 || planet === 19) && ui.results.firstClear) {
         ui.endingIdx = 0;
+        ui.endingSet = planet === 19 ? "ending2" : "ending";
         stopMusic();
         SFX.victory();
         ui.go("ending");
@@ -161,7 +163,7 @@ const app = {
     playMusic("menu");
     ui.go("map");
   },
-  endingDone() { playMusic("menu"); ui.go("menu"); },
+  endingDone() { playMusic("menu"); ui.go(profile ? "map" : "menu"); },
 
   buyUpgrade(id, cost) {
     if (profile.credits < cost) return;
@@ -206,6 +208,8 @@ function unlockSkins() {
   if (profile.achievements.includes("combo8")) grant("solar");
   if (profile.achievements.includes("endless10")) grant("void");
   if (profile.achievements.includes("savior")) grant("aurora");
+  if (profile.achievements.includes("trueVictory")) grant("nova");
+  if (profile.achievements.includes("bossRush")) grant("titan");
 }
 
 // ---------- game events ----------
@@ -287,10 +291,19 @@ function checkMissionEnd() {
     }
     if (missionOpts.planet === 0) award("earthSaved");
     if (profile.planetsCleared.length >= 5) award("halfway");
+    if (profile.planetsCleared.length >= 15) award("liberator");
     if (missionOpts.planet === 9) {
       award("savior");
       profile.stats.lastCampaignScore = game.score;
     }
+    if (missionOpts.planet === 10) award("frontierWar");
+    if (missionOpts.planet === 19) {
+      award("trueVictory");
+      profile.stats.lastCampaignScore = game.score;
+    }
+    if (missionOpts.planet === 20) award("nebula");
+    // full arsenal: every weapon unlocked
+    if (WEAPONS.every((w) => profile.weaponsUnlocked.includes(w.id))) award("arsenal");
     if (!game.tookDamage) award("noDamage");
     if (game.time < 90) award("speedRun");
   }
