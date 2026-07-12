@@ -1,9 +1,10 @@
 // Offline cache. Bump VERSION on every deploy so clients pick up new code.
-const VERSION = "sfaw-v3";
+const VERSION = "sfaw-v4";
 const ASSETS = [
   "./", "./index.html", "./strings.js", "./logic.js", "./icon.svg", "./manifest.webmanifest",
   "./js/main.js", "./js/game.js", "./js/ui.js", "./js/art.js", "./js/audio.js",
   "./js/input.js", "./js/save.js", "./js/data.js", "./js/particles.js", "./js/rng.js",
+  "./js/recorder.js",
 ];
 
 self.addEventListener("install", (e) => {

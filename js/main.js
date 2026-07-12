@@ -5,8 +5,9 @@ import { Game, derivedStats, upgradeCost } from "./game.js";
 import { UI } from "./ui.js";
 import { input } from "./input.js";
 import { save, loadSettings, storeSettings, dailyDate, dailyRecord, storeDaily } from "./save.js";
-import { initAudio, resumeAudio, playMusic, stopMusic, setVolumes, SFX } from "./audio.js";
+import { initAudio, resumeAudio, playMusic, stopMusic, setVolumes, SFX, getAudioStream } from "./audio.js";
 import { SKINS, WEAPONS, PERF, STAR_PAR } from "./data.js";
+import * as rec from "./recorder.js";
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -73,6 +74,7 @@ const app = {
       case "map": ui.go("map"); break;
       case "endless": this.launch({ mode: "endless", planet: Math.max(1, profile.planetsCleared.length) - 0 }); break;
       case "bossrush": this.launch({ mode: "bossrush", planet: 9 }); break;
+      case "gauntlet": this.launch({ mode: "gauntlet", planet: 19 }); break;
       case "daily": {
         const seed = parseInt(dailyDate(), 10) ^ 0x5F3759DF;
         this.launch({ mode: "daily", planet: (seed >>> 3) % 9 + 1, seed });
@@ -121,8 +123,13 @@ const app = {
     game.startMission(opts, profile);
     playMusic("combat");
     ui.go("mission");
+    // start a screen recording of this mission (best-effort; never blocks play)
+    ui.clipReady = false;
+    if (settings.record !== false) { try { rec.startRecording(canvas, getAudioStream()); } catch (e) {} }
     if (dev) window.__game = game;
   },
+
+  watchReplay() { if (rec.hasClip()) { ui.pauseReturn = false; rec.showReplay(() => {}); } },
 
   resumeMission() { ui.go("mission"); },
   restartMission() { this.launch(missionOpts); },
@@ -255,6 +262,10 @@ function checkMissionEnd() {
   const done = (game.state === "victory" && game.stateT > 2.4) || (game.state === "defeat" && game.stateT > 2.2);
   if (!done) return;
   resultsShown = true;
+  // finalize the screen recording so the results screen can offer replay/share
+  if (settings.record !== false) {
+    rec.stopRecording().then(() => { ui.clipReady = rec.hasClip(); }).catch(() => {});
+  }
   const win = game.state === "victory";
   const mode = missionOpts.mode;
   const creditGain = Math.round(game.creditsEarned * (win ? 1 : 0.6)) + (win && mode === "story" ? 150 + missionOpts.planet * 60 : 0);
@@ -323,6 +334,14 @@ function checkMissionEnd() {
     if (game.endlessWave >= 10) award("endless10");
     lines.push([STR.menu.dailyBest, r.best, "#ffd75c"]);
   }
+  if (mode === "gauntlet") {
+    const downed = game.gauntletIdx;
+    if (downed > (profile.gauntletBest || 0)) { profile.gauntletBest = downed; record = true; }
+    if (game.score > (profile.gauntletBestScore || 0)) { profile.gauntletBestScore = game.score; }
+    if (downed >= 10) award("gauntlet10");
+    lines.push([STR.results.bossesDown, downed, "#ff7de0"]);
+    lines.push([STR.results.bestBosses, profile.gauntletBest || 0, "#ffd75c"]);
+  }
   if (mode === "bossrush" && win) profile.bossRushDone = true;
 
   unlockSkins();
@@ -330,7 +349,7 @@ function checkMissionEnd() {
 
   ui.results = {
     outcome: win ? "victory" : "defeat",
-    title: win ? STR.results.victory : (mode === "endless" || mode === "daily" ? STR.results.endlessOver : STR.results.defeat),
+    title: win ? STR.results.victory : (mode === "endless" || mode === "daily" || mode === "gauntlet" ? STR.results.endlessOver : STR.results.defeat),
     lines,
     perfect: win && !game.tookDamage,
     record,

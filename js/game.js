@@ -1,5 +1,5 @@
 // Core simulation + world rendering. Fixed-timestep, seeded RNG, pooled entities.
-import { WORLD, PERF, DIFFS, WEAPONS, MISSILE, UPGRADES, ENEMIES, BOSSES, PLANETS, POWERUPS, POWERUP_TIME, POWERUP_DROP, ARTIFACT_DROP, ENDLESS, NGPLUS, SKINS, PERKS, SHIPS, EVENTS, JUICE } from "./data.js";
+import { WORLD, PERF, DIFFS, WEAPONS, MISSILE, UPGRADES, ENEMIES, BOSSES, PLANETS, POWERUPS, POWERUP_TIME, POWERUP_DROP, ARTIFACT_DROP, ENDLESS, NGPLUS, SKINS, PERKS, SHIPS, EVENTS, JUICE, GAUNTLET } from "./data.js";
 import { simRng, fxRng } from "./rng.js";
 import { spawnGlow, spawnSpark, explosion, updateParticles, drawParticles, clearParticles, GLOW, floatText, updateTexts, drawTexts, setParticleSprites, particleCount } from "./particles.js";
 import { PAL, nebulaBackground, planetSprite } from "./art.js";
@@ -85,7 +85,9 @@ export class Game {
     this.planet = opts.planet ?? 0;
     this.diff = DIFFS[profile.difficulty] || DIFFS.normal;
     this.ngMul = profile.ngPlus ? NGPLUS : { hp: 1, dmg: 1, reward: 1 };
-    const pdef = PLANETS[Math.min(this.planet, PLANETS.length - 1)];
+    let pdef = PLANETS[Math.min(this.planet, PLANETS.length - 1)];
+    // Gauntlet is a pure boss-skill loop — keep the dramatic backdrop, drop the hazard.
+    if (this.mode === "gauntlet") pdef = { ...pdef, hazard: null };
     this.pdef = pdef;
     if (this.isDaily && opts.seed) simRng.reseed(opts.seed);
     else simRng.reseed((this.planet + 1) * 7919 + (profile.ngPlus + 1) * 31 + { easy: 1, normal: 2, hard: 3, nightmare: 4 }[profile.difficulty] * 101 + (this.mode === "endless" ? 55 : 0));
@@ -136,6 +138,7 @@ export class Game {
     this.waveIdx = -1;
     this.endlessWave = 0;
     this.rushIdx = 0;
+    this.gauntletIdx = 0;
     this.slowMo = 1;
     this.stateT = 0;
     this.hazardT = 0;
@@ -376,7 +379,7 @@ export class Game {
     switch (this.state) {
       case "flyin":
         if (this.stateT > 1.4) {
-          if (this.mode === "bossrush") { this.setState("bossWarn"); }
+          if (this.mode === "bossrush" || this.mode === "gauntlet") { this.setState("bossWarn"); }
           else this.nextWave();
         }
         break;
@@ -388,10 +391,18 @@ export class Game {
         break;
       case "bossWarn":
         if (this.stateT > 2.4) {
-          const idx = this.mode === "bossrush" ? this.rushIdx
-            : this.mode === "endless" ? (Math.floor(this.endlessWave / ENDLESS.bossEvery) - 1) % BOSSES.length
-            : this.planet;
-          const mul = this.mode === "endless" ? 0.55 * (1 + this.endlessWave * 0.04) : this.mode === "bossrush" ? 0.8 : 1;
+          let idx, mul;
+          if (this.mode === "gauntlet") {
+            idx = GAUNTLET.order[this.gauntletIdx % GAUNTLET.order.length];
+            mul = GAUNTLET.hpBase + this.gauntletIdx * GAUNTLET.hpRamp;
+            // ramp enemy damage each boss (read live by bullet/contact damage)
+            this.ngMul = { hp: 1, dmg: GAUNTLET.dmgBase + this.gauntletIdx * GAUNTLET.dmgRamp, reward: 1 };
+          } else {
+            idx = this.mode === "bossrush" ? this.rushIdx
+              : this.mode === "endless" ? (Math.floor(this.endlessWave / ENDLESS.bossEvery) - 1) % BOSSES.length
+              : this.planet;
+            mul = this.mode === "endless" ? 0.55 * (1 + this.endlessWave * 0.04) : this.mode === "bossrush" ? 0.8 : 1;
+          }
           this.spawnBoss(idx, mul);
           this.setState("boss");
         }
@@ -1265,6 +1276,16 @@ export class Game {
       // heal + draft between bosses
       const p = this.player, st = this.stats;
       p.hull = Math.min(st.maxHull, p.hull + st.maxHull * 0.35);
+      p.shield = st.maxShield;
+      this.offerDraft();
+      this.setState("bossWarn");
+    } else if (this.mode === "gauntlet") {
+      this.gauntletIdx++;
+      this.addScore(GAUNTLET.scorePerBoss);
+      if (this.gauntletIdx === 10) this.emit("achieve", "gauntlet10");
+      // heal + draft between bosses, then straight into the next one — infinite loop
+      const p = this.player, st = this.stats;
+      p.hull = Math.min(st.maxHull, p.hull + st.maxHull * GAUNTLET.healFrac);
       p.shield = st.maxShield;
       this.offerDraft();
       this.setState("bossWarn");

@@ -22,6 +22,8 @@ export function freshProfile() {
     endlessBestWave: 0,
     endlessBestScore: 0,
     bossRushDone: false,
+    gauntletBest: 0,         // most bosses downed in one Gauntlet run
+    gauntletBestScore: 0,
     hiddenUnlocked: false,
     stars: {},               // planetIdx -> best 0-3
   };
@@ -29,6 +31,7 @@ export function freshProfile() {
 
 function migrate(p) {
   if (p && !p.stars) p.stars = {};
+  if (p && p.gauntletBest === undefined) { p.gauntletBest = 0; p.gauntletBestScore = 0; }
   return p;
 }
 
@@ -65,7 +68,7 @@ export const save = {
 };
 
 export function loadSettings() {
-  const def = { music: 0.8, sfx: 0.8, shake: true, reducedFlash: false, haptics: true };
+  const def = { music: 0.8, sfx: 0.8, shake: true, reducedFlash: false, haptics: true, record: true };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) return Object.assign(def, JSON.parse(raw));

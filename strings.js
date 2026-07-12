@@ -12,6 +12,7 @@ export const STR = {
     galaxyMap: "GALAXY MAP",
     endless: "ENDLESS SURVIVAL",
     bossRush: "BOSS RUSH",
+    gauntlet: "BOSS GAUNTLET",
     daily: "DAILY RUN",
     dailyBest: "TODAY'S BEST",
     hangar: "HANGAR",
@@ -35,6 +36,7 @@ export const STR = {
     shake: "SCREEN SHAKE",
     flash: "REDUCED FLASH",
     haptics: "VIBRATION (MOBILE)",
+    record: "SCREEN RECORDING",
     on: "ON",
     off: "OFF",
   },
@@ -208,6 +210,7 @@ export const STR = {
     "RIM SENTINEL", "CRYSTAL LEVIATHAN", "SOLAR TYRANT", "VOID DEVOURER", "HIVE EMPRESS",
     "FORGE SOVEREIGN", "GLACIAL COLOSSUS", "SHADOW MONARCH", "THRESHOLD GUARDIAN", "THE PROGENITOR",
     "THE FIRST ONE",
+    "VOIDLORD PRIME", "THE DEVOURER", "OMEGA SENTINEL", "CHAOS BRINGER", "THE ANNIHILATION",
   ],
 
   intro: [
@@ -247,6 +250,9 @@ export const STR = {
     newRecord: "NEW RECORD!",
     bestWave: "BEST WAVE",
     highScore: "HIGH SCORE",
+    bossesDown: "BOSSES DEFEATED",
+    bestBosses: "BEST",
+    clip: "▶ WATCH & SHARE CLIP",
   },
 
   objectives: {
@@ -285,6 +291,7 @@ export const STR = {
     liberator:    { name: "LIBERATOR",       desc: "Liberate 15 planets" },
     arsenal:      { name: "FULL ARSENAL",    desc: "Unlock every weapon" },
     nebula:       { name: "THE FIRST ONE",   desc: "Clear the hidden world" },
+    gauntlet10:   { name: "GAUNTLET MASTER", desc: "Defeat 10 bosses in the Gauntlet" },
   },
 
   tips: [

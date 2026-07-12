@@ -28,6 +28,7 @@ export class UI {
     this.results = null;
     this.endingIdx = 0;
     this.endingSet = "ending";
+    this.clipReady = false;
     this.radarOut = [];
     this.heroPreview = null;
     this.stars = Array.from({ length: 90 }, () => ({ x: Math.random(), y: Math.random(), s: Math.random() }));
@@ -236,8 +237,8 @@ export class UI {
     g.fillText(STR.title + " — " + STR.subtitle, cx, 64);
     g.restore();
     const bw = Math.min(360, w - 60);
-    const bh = Math.min(44, (h - 170) / 10 - 8), gap = Math.min(12, bh * 0.25);
-    let y = Math.min(120, h * 0.14);
+    const bh = Math.min(44, (h - 160) / 11 - 7), gap = Math.min(11, bh * 0.24);
+    let y = Math.min(112, h * 0.13);
     const hasSave = this.app.hasAnySave();
     const dailyBest = this.app.dailyBest();
     const items = [
@@ -246,6 +247,7 @@ export class UI {
       ["map", STR.menu.galaxyMap, !profile],
       ["endless", STR.menu.endless, !profile],
       ["bossrush", STR.menu.bossRush, !profile],
+      ["gauntlet", STR.menu.gauntlet, !profile],
       ["daily", STR.menu.daily + (dailyBest ? `  ·  ${STR.menu.dailyBest} ${dailyBest}` : ""), !profile],
       ["hangar", STR.menu.hangar, !profile],
       ["ach", STR.menu.achievements, !profile],
@@ -593,7 +595,7 @@ export class UI {
       if (this.button(g, key + "+", px + 376, y - 16, 36, 32, "+")) { s[key] = Math.min(1, Math.round((s[key] + 0.1) * 10) / 10); this.app.settingsChanged(); }
       y += 62;
     }
-    for (const [key, label] of [["shake", STR.settings.shake], ["reducedFlash", STR.settings.flash], ["haptics", STR.settings.haptics]]) {
+    for (const [key, label] of [["shake", STR.settings.shake], ["reducedFlash", STR.settings.flash], ["haptics", STR.settings.haptics], ["record", STR.settings.record]]) {
       g.fillStyle = "#dfe7ff"; g.font = `bold 15px ${FONT}`; g.textAlign = "left";
       g.fillText(label, px + 34, y);
       if (this.button(g, key, px + 246, y - 16, 120, 32, s[key] ? STR.settings.on : STR.settings.off)) { s[key] = !s[key]; this.app.settingsChanged(); }
@@ -978,7 +980,15 @@ export class UI {
       g.fillText(STR.results.newRecord, w / 2, y + 6); y += 30;
     }
     const bw = 230;
-    y = Math.min(h - 70, y + 30);
+    // "watch & share clip" — appears once the mission recording is finalized
+    if (this.clipReady) {
+      y = Math.min(h - 122, y + 24);
+      const cbw = Math.min(340, w - 44);
+      if (this.button(g, "clip", w / 2 - cbw / 2, y, cbw, 46, STR.results.clip, { size: 15 })) this.app.watchReplay();
+      y += 58;
+    } else {
+      y = Math.min(h - 70, y + 30);
+    }
     if (win || r.mode !== "story") {
       if (this.button(g, "cont", w / 2 - bw / 2, y, bw, 48, STR.results.tapToContinue)) this.app.resultsContinue();
     } else {

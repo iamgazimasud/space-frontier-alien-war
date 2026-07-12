@@ -36,6 +36,16 @@ export function initAudio(saved) {
 }
 
 export function resumeAudio() { if (ctx && ctx.state === "suspended") ctx.resume(); }
+
+// A persistent tap on the master mix, used by the screen recorder to capture game audio.
+let recordDest = null;
+export function getAudioStream() {
+  if (!ctx || !master) return null;
+  try {
+    if (!recordDest) { recordDest = ctx.createMediaStreamDestination(); master.connect(recordDest); }
+    return recordDest.stream;
+  } catch (e) { return null; }
+}
 export function setVolumes(v) { settings = v; applyVolumes(); }
 function applyVolumes() {
   if (!ctx) return;

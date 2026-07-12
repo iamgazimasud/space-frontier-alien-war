@@ -126,7 +126,23 @@ export const BOSSES = [
   { kind: "organic", hp: 26000, r: 165, speed: 150, dmg: 34, phases: 6, patterns: ["nova", "cross", "spiral", "lightning", "wall", "charge"] },
   // hidden final boss (Nebula X)
   { kind: "organic", hp: 8000,  r: 130, speed: 150, dmg: 25, phases: 5, patterns: ["spiral", "lightning", "charge", "spawn:ghost", "ring"] },
+  // --- Nightmare bosses (indices 21-25): Gauntlet mode only, brutal ---
+  { kind: "mech",    hp: 22000, r: 155, speed: 150, dmg: 34, phases: 6, patterns: ["cross", "wall", "beamsweep", "nova", "snipe", "spawn:warden"] },
+  { kind: "organic", hp: 24000, r: 158, speed: 170, dmg: 36, phases: 6, patterns: ["nova", "spiral", "charge", "wall", "spawn:phantom", "lightning"] },
+  { kind: "mech",    hp: 26000, r: 160, speed: 150, dmg: 38, phases: 7, patterns: ["beamsweep", "cross", "snipe", "wall", "spawn:sentinel", "ring", "nova"] },
+  { kind: "organic", hp: 28000, r: 164, speed: 175, dmg: 40, phases: 7, patterns: ["ghost", "nova", "cross", "charge", "lightning", "wall", "spawn:warden"] },
+  { kind: "mech",    hp: 34000, r: 175, speed: 160, dmg: 44, phases: 8, patterns: ["cross", "beamsweep", "wall", "nova", "snipe", "lightning", "charge", "spawn:elite"] },
 ];
+
+// Boss Gauntlet: an infinite loop of the hardest bosses, scaling forever. A true endless replay loop.
+export const GAUNTLET = {
+  // curated hard rotation — Act II bosses interleaved with the nightmare bosses
+  order: [10, 12, 14, 21, 16, 18, 11, 22, 13, 15, 23, 17, 19, 24, 25],
+  hpBase: 0.85, hpRamp: 0.14,    // hpMul = hpBase + bossesDefeated * hpRamp (grows each fight)
+  dmgBase: 1.0,  dmgRamp: 0.05,  // enemy damage ramp per boss
+  healFrac: 0.4,                 // hull restored between bosses
+  scorePerBoss: 5000,
+};
 
 // Planet mission scripts. waves: list of {mix:{type:count}} spawned in order.
 // hazard: per-planet environmental modifier handled in game.js.
@@ -237,4 +253,5 @@ export const ACH_IDS = [
   "firstBlood", "earthSaved", "halfway", "savior", "kills100", "kills1000",
   "noDamage", "speedRun", "combo8", "treasure", "endless10", "bossRush",
   "frontierWar", "trueVictory", "liberator", "arsenal", "nebula",
+  "gauntlet10",
 ];
