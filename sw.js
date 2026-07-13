@@ -1,5 +1,5 @@
 // Offline cache. Bump VERSION on every deploy so clients pick up new code.
-const VERSION = "sfaw-v6";
+const VERSION = "sfaw-v7";
 const ASSETS = [
   "./", "./index.html", "./strings.js", "./logic.js", "./icon.svg", "./manifest.webmanifest",
   "./js/main.js", "./js/game.js", "./js/ui.js", "./js/art.js", "./js/audio.js",

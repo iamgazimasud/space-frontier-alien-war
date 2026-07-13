@@ -109,20 +109,20 @@ function openInTab() {
   try { return !!window.open(clipUrl, "_blank"); } catch (e) { return false; }
 }
 
-// Native OS share sheet with the video file — the reliable path on Android/iOS.
-// Returns a status string, or null if file-sharing isn't available at all.
+// Native OS share sheet with the video file — the reliable path on Android/iOS
+// (its sheet also offers "Save to Files / Photos / Drive"). We attempt the share
+// even when canShare() reports false, since some browsers under-report support.
+// Returns a status string, or null if it genuinely isn't available.
 async function nativeShare() {
   if (!navigator.share) return null;
   const file = makeFile();
-  let canFiles = true;
-  try { if (navigator.canShare) canFiles = navigator.canShare({ files: [file] }); } catch (e) { canFiles = true; }
-  if (!canFiles) return null;
+  const payload = {
+    files: [file],
+    title: "Space Frontier: Alien War",
+    text: "My run in Space Frontier: Alien War 🚀 Play free: https://space-frontier-alien-war.vercel.app",
+  };
   try {
-    await navigator.share({
-      files: [file],
-      title: "Space Frontier: Alien War",
-      text: "My run in Space Frontier: Alien War 🚀 Play free: https://space-frontier-alien-war.vercel.app",
-    });
+    await navigator.share(payload);
     return "Shared!";
   } catch (e) {
     if (e && e.name === "AbortError") return "";      // user dismissed the sheet — not an error
@@ -130,29 +130,14 @@ async function nativeShare() {
   }
 }
 
-// SHARE button: prefer the native share sheet, then fall back.
+// SHARE button: native share sheet first, then a download / new-tab fallback.
 async function share() {
   if (!hasClip()) return "No clip yet — play a mission first.";
   const s = await nativeShare();
   if (s !== null) return s;
-  if (!isMobile() && downloadLink()) return "Saved to your downloads.";
-  if (openInTab()) return "Video opened in a new tab — long-press it to save or share.";
-  return "Sharing isn't supported on this device.";
-}
-
-// SAVE button: on mobile a direct download does nothing inside an app, so use the
-// share sheet (it has Save to Files / Photos / Drive). Desktop gets a real download.
-async function save() {
-  if (!hasClip()) return "No clip yet — play a mission first.";
-  if (isMobile()) {
-    const s = await nativeShare();
-    if (s !== null) return s === "Shared!" ? "Saved / shared!" : s;
-    if (openInTab()) return "Video opened in a new tab — long-press it to save.";
-    return "Couldn't save on this device.";
-  }
-  if (downloadLink()) return "Saved to your downloads.";
-  if (openInTab()) return "Video opened in a new tab — right-click to save.";
-  return "Couldn't save on this device.";
+  if (downloadLink()) return "Saved to your downloads. Check your notification bar.";
+  if (openInTab()) return "Video opened — press & hold it to save or share.";
+  return "Press & hold the video above to save it.";
 }
 
 // Build (once) and show the replay overlay. onClose fires when the user dismisses it.
@@ -161,6 +146,10 @@ export function showReplay(onClose) {
   if (!overlay) overlay = buildOverlay();
   const video = overlay.querySelector("video");
   video.src = clipUrl;
+  if (overlay._saveAnchor) {
+    overlay._saveAnchor.href = clipUrl;
+    overlay._saveAnchor.setAttribute("download", `space-frontier-clip.${fileExt()}`);
+  }
   if (overlay._status) overlay._status.textContent = "";
   overlay.style.display = "flex";
   overlay._onClose = onClose;
@@ -200,7 +189,7 @@ function buildOverlay() {
   o.appendChild(video);
 
   const hint = document.createElement("div");
-  hint.textContent = "Share your run to social media, or save the video.";
+  hint.textContent = "Save the video, or Share it to social media.";
   hint.style.cssText = "color:#9fb2dd;font:400 13px system-ui,sans-serif;text-align:center;";
   o.appendChild(hint);
 
@@ -212,14 +201,25 @@ function buildOverlay() {
   const row = document.createElement("div");
   row.style.cssText = "display:flex;flex-wrap:wrap;gap:12px;width:100%;max-width:520px;";
   const bShare = document.createElement("button"); bShare.textContent = "SHARE"; btnStyle(bShare, "#41f7d2");
-  const bSave = document.createElement("button"); bSave.textContent = "SAVE VIDEO"; btnStyle(bSave, "#ffd75c");
+  // SAVE is a REAL <a download> anchor — a genuine tap on it is the most reliable
+  // way to download a file on mobile (JS-triggered clicks get blocked in some apps).
+  const bSave = document.createElement("a"); bSave.textContent = "SAVE VIDEO"; btnStyle(bSave, "#ffd75c");
+  bSave.setAttribute("download", "space-frontier-clip.webm");
+  bSave.style.cssText += "text-decoration:none;display:flex;align-items:center;justify-content:center;text-align:center;";
   const bClose = document.createElement("button"); bClose.textContent = "CLOSE"; btnStyle(bClose, "#9fb2dd");
   const setStatus = (t) => { if (t) status.textContent = t; };
   bShare.onclick = async () => { setStatus("Opening share…"); setStatus(await share()); };
-  bSave.onclick = async () => { setStatus("Saving…"); setStatus(await save()); };
+  // The anchor downloads natively; also surface a helpful status + a JS fallback.
+  bSave.onclick = () => { setStatus("Saving… check your notification bar / Downloads. If nothing happens, tap SHARE → Save to Files."); };
   bClose.onclick = hideReplay;
   row.append(bShare, bSave, bClose);
   o.appendChild(row);
+  o._saveAnchor = bSave;
+
+  const tip = document.createElement("div");
+  tip.textContent = "Tip: on a phone you can also press & hold the video, then choose “Download video”.";
+  tip.style.cssText = "color:#6b7aa0;font:400 12px system-ui,sans-serif;text-align:center;max-width:420px;";
+  o.appendChild(tip);
 
   document.body.appendChild(o);
   return o;
